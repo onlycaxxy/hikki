@@ -88,7 +88,33 @@ TERRITORY STRATEGY - Semantic Clustering with Thresholds:
   * For learning/exam topics: Always create territories by subject/category
   * For creative/brainstorming: Only create territories if clusters are obvious
   * For process/job search: Create territories by stage (Research, Apply, Interview, etc.)
-- Territory colors: Assign distinct pastel colors to help differentiate groups visually`;
+- Territory colors: Assign distinct pastel colors to help differentiate groups visually
+
+EDGE STRATEGY - Adaptive Density with Classification:
+- Adaptive density based on map size:
+  * Small maps (<10 nodes): Rich connections - show all meaningful relationships
+  * Medium maps (10-30 nodes): Moderate connections - key relationships only
+  * Large maps (>30 nodes): Minimal connections - essential links to avoid clutter
+- Edge types (use "type" field to classify each edge):
+  1. "relationship" - Direct, explicitly mentioned connections (highest priority)
+     Example: "Learn JavaScript to build web apps" → JS connects to Web Apps
+  2. "hierarchy" - Parent-child, prerequisite, or contains relationships
+     Example: "Data Structures" contains "Arrays", "Trees", "Graphs"
+  3. "similarity" - Semantically related concepts or shared category
+     Example: "Python" and "JavaScript" are both programming languages
+  4. "dependency" - Temporal sequence or required before
+     Example: "Study" → "Practice Test" → "Real Exam" (sequential flow)
+- Edge generation priority (add in this order):
+  1. First: Add all direct/explicit relationships mentioned in the prompt
+  2. Second: Add hierarchical relationships (parent-child, prerequisites)
+  3. Third: Add semantic similarity edges only if meaningful and map isn't too dense
+  4. Fourth: Add temporal/sequential edges for process-based topics
+- Edge weights (use "weight" field 1-10):
+  * Strong relationship: 8-10 (direct connection, prerequisites)
+  * Moderate relationship: 5-7 (related concepts, same category)
+  * Weak relationship: 1-4 (loose connection, optional)
+- Important: Avoid redundant edges - if A→B→C exists, don't add A→C unless critically important
+- Give edges descriptive labels when the relationship type isn't obvious`;
 
 class LLMService {
   constructor() {
