@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Character-Workflow Canvas MVP</title>
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+    .app { display: grid; grid-template-columns: 320px 1fr; height: 100vh; }
+    .sidebar { border-right: 1px solid #eee; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+    .sidebar h2 { margin: 0 0 6px; font-size: 18px; }
+    .sidebar textarea { width: 100%; min-height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; }
+    .sidebar .btn { padding: 10px 12px; border: none; border-radius: 10px; background: #111; color: #fff; cursor: pointer; }
+    .sidebar .row { display: flex; gap: 8px; }
+
+    .main { display: grid; grid-template-rows: 48px 1fr; }
+    .toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #eee; }
+    .toolbar .btn { padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; background: #fafafa; cursor: pointer; }
+    .toolbar input[type="text"] { padding: 6px 8px; border: 1px solid #ddd; border-radius: 8px; min-width: 200px; }
+
+    .canvas-wrap { position: relative; background: #fbfbfd; }
+    svg { width: 100%; height: calc(100vh - 48px); display: block; cursor: grab; }
+    svg.dragging { cursor: grabbing; }
+
+    .territory { fill: #f6f7fb; stroke: #e5e7f0; stroke-width: 1.5; }
+    .territory-title { font-size: 13px; fill: #556; }
+
+    .node { fill: #fff; stroke: #c8cdda; stroke-width: 1.5; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.08)); }
+    .node.selected { stroke: #4f46e5; stroke-width: 2; }
+    .node-label { font-size: 12px; fill: #334; pointer-events: none; }
+
+    .edge { stroke: #b9bfd2; stroke-width: 1.25; marker-end: url(#arrow); }
+
+    .inspector { position: absolute; right: 18px; top: 18px; width: 300px; background: #fff; border: 1px solid #eee; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); padding: 12px; display: grid; gap: 10px; }
+    .inspector h3 { margin: 0; font-size: 16px; }
+    .inspector input, .inspector textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 8px; }
+
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 999px; font-size: 12px; background: #fff; }
+    .muted { color: #667085; font-size: 12px; }
+
+    .overlay-editor{
+      position: absolute;
+      width: 320px; /* 我推薦固定寬度較穩定，也可改成 min/max */
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+      padding: 12px;
+      z-index: 40;
+  }
+  </style>
+</head>
+<body>
+<div id="app" class="app">
+  <!-- Sidebar: chat & analysis -->
+  <aside class="sidebar">
+    <div>
+      <h2>Character Chat ▸ Needs</h2>
+      <textarea v-model="chatInput" placeholder="e.g. I want to prepare for IELTS in 8 weeks; I struggle with timing and writing Task 1..."></textarea>
+      <div class="row">
+        <button class="btn" @click="runAnalysis()">Analyze ▸ SWOT</button>
+        <button class="btn" @click="generateMap()">Generate Map</button>
+      </div>
+    </div>
+
+    <div>
+      <h2>SWOT (editable)</h2>
+      <label class="muted">Strengths</label>
+      <textarea v-model="swot.
+      "></textarea>
+      <label class="muted">Weaknesses</label>
+      <textarea v-model="swot.weaknesses"></textarea>
+      <label class="muted">Opportunities</label>
+      <textarea v-model="swot.opportunities"></textarea>
+      <label class="muted">Threats</label>
+      <textarea v-model="swot.threats"></textarea>
+      <div class="row">
+        <button class="btn" @click="saveState()">Save</button>
+        <button class="btn" @click="loadState()">Load</button>
+        <button class="btn" @click="resetAll()">Reset</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main: toolbar + canvas -->
+  <main class="main">
+    <div class="toolbar">
+      <span class="badge">Zoom: {{ (100 * (initView.w / viewBox.w)).toFixed(0) }}%</span>
+      <button class="btn" @click="zoomAtCenter(1.2)">+</button>
+      <button class="btn" @click="zoomAtCenter(1/1.2)">−</button>
+      <button class="btn" @click="centerView()">Center</button>
+      <input type="text" placeholder="Quick add node (Label)" v-model="quickNodeLabel" @keydown.enter="quickAddNode()" />
+      <button class="btn" @click="quickAddNode()">Add Node</button>
+      <span class="muted">Click+Drag to pan · Scroll to zoom · Drag nodes</span>
+    </div>
+
+    <section class="canvas-wrap">
+      <svg :class="{ dragging: isPanning }" :viewBox="`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`"
+           @mousedown="onPanStart" @mousemove="onPanMove" @mouseup="onPanEnd" @mouseleave="onPanEnd"
+           @wheel.prevent="onWheel">
+        <!-- defs -->
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#b9bfd2"></path>
+          </marker>
+        </defs>
+
+        <!-- territories -->
+        <g v-for="t in territories" :key="t.id">
+          <rect class="territory" :x="t.x" :y="t.y" :rx="12" :ry="12" :width="t.w" :height="t.h"></rect>
+          <text class="territory-title" :x="t.x + 10" :y="t.y + 18">{{ t.label }}</text>
+        </g>
+
+        <!-- edges -->
+        <g>
+          <line v-for="e in edges" :key="e.id" class="edge" :x1="nodeById(e.source)?.x || 0" :y1="nodeById(e.source)?.y || 0"
+                :x2="nodeById(e.target)?.x || 0" :y2="nodeById(e.target)?.y || 0" />
+        </g>
+
+        <!-- nodes -->
+        <g v-for="n in nodes" :key="n.id" @mousedown.stop="onNodeDragStart($event, n)" @dblclick.stop="selectNode(n)">
+          <rect :class="['node', selectedNode && selectedNode.id === n.id ? 'selected' : '']" :x="n.x - 60" :y="n.y - 22" rx="10" ry="10" width="120" height="44" />
+          <text class="node-label" :x="n.x" :y="n.y + 4" text-anchor="middle">{{ n.label }}</text>
+        </g>
+
+      </svg>
+
+
+    </section>
+  </main>
+</div>
+
+<script>
+
+const { createApp, ref, reactive, computed, watch, onMounted, nextTick } = Vue;
+
+
+
+
+
+createApp({
+  setup() {
+    
+    // ===== Chat & SWOT =====
+    const chatInput = ref("");
+    const swot = reactive({ strengths: "", weaknesses: "", opportunities: "", threats: "" });
+    const editingNode = ref(null); // the node object being edited (reference into nodes array)
+    const overlayStyle = ref({ left: '0px', top: '0px', transform: 'translate(-50%,-100%)' });
+    const initView = reactive({ x: 0, y: 0, w: 1600, h: 900 });
+    const viewBox = reactive({
+      x: initView.x,
+      y: initView.y,
+      w: initView.w,
+      h: initView.h
+    });
+    const territories = reactive([]);
+    const nodes = reactive([]);
+    const edges = reactive([]);
+    const selectedNode = ref(null);
+    const quickNodeLabel = ref("");
+    const isPanning = ref(false);
+    function centerView() {
+      viewBox.x = initView.x;
+      viewBox.y = initView.y;
+      viewBox.w = initView.w;
+      viewBox.h = initView.h;
+    }
+    function zoomAtCenter(scale) {
+      const center = { x: viewBox.x + viewBox.w/2, y: viewBox.y + viewBox.h/2 };
+      viewBox.x = center.x - viewBox.w/2 * scale;
+      viewBox.y = center.y - viewBox.h/2 * scale;
+      viewBox.w *= scale;
+      viewBox.h *= scale;
+    }
+    const onWheel = (event) => {
+      // zoom toward mouse cursor
+      const scale = event.deltaY < 0 ? 0.9 : 1.1; // in/out
+      const mouseX = event.offsetX;
+      const mouseY = event.offsetY;
+      const svg = event.currentTarget;
+      const svgRect = svg.getBoundingClientRect();
+      const mx = viewBox.x + (mouseX / svgRect.width) * viewBox.w;
+      const my = viewBox.y + (mouseY / svgRect.height) * viewBox.h;
+
+      viewBox.w *= scale;
+      viewBox.h *= scale;
+
+      // Keep zoom centered at cursor
+      viewBox.x = mx - (mouseX / svgRect.width) * viewBox.w;
+      viewBox.y = my - (mouseY / svgRect.height) * viewBox.h;
+    };
+    const onPanStart = (e) => {
+      isPanning.value = true;
+      lastPan.x = e.clientX;
+      lastPan.y = e.clientY;
+    };
+
+    const onPanMove = (e) => {
+      if (!isPanning.value) return;
+      const dx = (e.clientX - lastPan.x) * (viewBox.w / e.currentTarget.clientWidth);
+      const dy = (e.clientY - lastPan.y) * (viewBox.h / e.currentTarget.clientHeight);
+      viewBox.x -= dx;
+      viewBox.y -= dy;
+      lastPan.x = e.clientX;
+      lastPan.y = e.clientY;
+    };
+
+    const onPanEnd = () => { isPanning.value = false; };
+    // ===== Graph State =====
+    function worldToScreen(node) {
+    const svg = document.querySelector('svg');
+    const rect = svg.getBoundingClientRect();
+    const sx = ((node.x - viewBox.x) / viewBox.w) * rect.width + rect.left;
+    const sy = ((node.y - viewBox.y) / viewBox.h) * rect.height + rect.top;
+    return { x: sx, y: sy, svgRect: rect };
+    }
+
+    function zoomToNode(node, targetScale = 2, duration = 350) {
+  const start = { x: viewBox.x, y: viewBox.y, w: viewBox.w, h: viewBox.h };
+  const cx = node.x, cy = node.y;
+  const targetW = initView.w / targetScale;
+  const targetH = initView.h / targetScale;
+  const target = { x: cx - targetW / 2, y: cy - targetH / 2, w: targetW, h: targetH };
+
+  const startTime = performance.now();
+  function step(now) {
+    const t = Math.min(1, (now - startTime) / duration);
+    // ease (easeOutQuad)
+    const e = 1 - (1 - t) * (1 - t);
+    viewBox.x = start.x + (target.x - start.x) * e;
+    viewBox.y = start.y + (target.y - start.y) * e;
+    viewBox.w = start.w + (target.w - start.w) * e;
+    viewBox.h = start.h + (target.h - start.h) * e;
+    if (t < 1) requestAnimationFrame(step); else {
+      // after animation done, ensure overlay positioned
+      updateOverlayPosition();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+// Inspector / Node Editor (template-only; remove any HTML from here)
+
+function openEditorForNode(node) { /* existing body */ }
+function updateOverlayPosition() { /* existing body */ }
+function saveEditor() { /* existing body */ }
+function closeEditor() { /* existing body */ }
+
+watch(() => [viewBox.x, viewBox.y, viewBox.w, viewBox.h], () => {
+  if (editingNode.value) updateOverlayPosition();
+});
+window.addEventListener('resize', () => {
+  if (editingNode.value) updateOverlayPosition();
+});
+// open overlay editor (double-click handler)
+function openEditorForNode(node) {
+  editingNode.value = node; // keep reference so edits bind directly
+  // zoom first then show editor after slight delay
+  zoomToNode(node, 2);
+  // ensure next tick + small timeout to allow animation to position viewBox
+  setTimeout(() => updateOverlayPosition(), 420);
+}
+
+// compute overlay position based on node screen coords & svg rect
+function updateOverlayPosition() {
+  if (!editingNode.value) return;
+  const { x, y, svgRect } = worldToScreen(editingNode.value);
+  // position overlay slightly above node (you can adjust offsets)
+  const left = x - 160; // overlay width 320/2
+  const top = y - 160;  // position above
+  overlayStyle.value = {
+    left: Math.max(8, Math.min(window.innerWidth - 328, `${left}px`)),
+    top: `${Math.max(8, top)}px`,
+    transform: 'none'
+  };
+}
+
+    // ===== Selection & CRUD =====
+    function nodeById(id) { return nodes.find(n => n.id === id); }
+    function selectNode(n) { selectedNode.value = n; }
+    function deselectNode() { selectedNode.value = null; }
+    function deleteNode(id) {
+      const i = nodes.findIndex(n => n.id === id);
+      if (i >= 0) nodes.splice(i, 1);
+      for (let j = edges.length - 1; j >= 0; j--) {
+        if (edges[j].source === id || edges[j].target === id) edges.splice(j, 1);
+      }
+      selectedNode.value = null;
+    }
+
+    function quickAddNode() {
+      if (!quickNodeLabel.value.trim()) return;
+      const id = crypto.randomUUID();
+      nodes.push({ id, label: quickNodeLabel.value.trim(), x: viewBox.x + viewBox.w/2, y: viewBox.y + viewBox.h/2, note: "" });
+      quickNodeLabel.value = "";
+    }
+
+    // ===== Persistence =====
+    function saveEditor() {
+  // editingNode is a reference into nodes array, so it's already mutated
+  // do a snapshot save here
+  saveSnapshot(`edit-${editingNode.value.id}`);
+  editingNode.value = null;
+}
+function closeEditor() {
+  editingNode.value = null;
+}
+
+// keep overlay repositioned on viewBox change & resize
+watch(() => [viewBox.x, viewBox.y, viewBox.w, viewBox.h], () => {
+  // throttle-ish
+  if (editingNode.value) updateOverlayPosition();
+});
+window.addEventListener('resize', () => {
+  if (editingNode.value) updateOverlayPosition();
+});
+
+// helper: saveSnapshot implementation (simple)
+function saveSnapshot(name) {
+  const histRaw = localStorage.getItem('mvp-history');
+  const history = histRaw ? JSON.parse(histRaw) : [];
+  const data = { territories: territories.slice(), nodes: nodes.slice(), edges: edges.slice(), swot: {...swot}, ts: Date.now(), name };
+  history.push({ id: crypto.randomUUID(), ts: Date.now(), name: name || `snap-${history.length+1}`, data });
+  localStorage.setItem('mvp-history', JSON.stringify(history));
+}
+
+    // ===== Analysis (stub) =====
+    function runAnalysis() {
+      // Very naive parser → extracts keywords and drafts a SWOT, you can replace with real LLM call.
+      const text = chatInput.value.toLowerCase();
+      if (text.includes('ielts')) {
+        if (!swot.strengths) swot.strengths = 'Good listening; motivated; strong reading speed';
+        if (!swot.weaknesses) swot.weaknesses = 'Timing under pressure; Writing Task 1 structure';
+        if (!swot.opportunities) swot.opportunities = 'Benchmark practice tests; targeted drills';
+        if (!swot.threats) swot.threats = 'Burnout; procrastination; test anxiety';
+      } else {
+        if (!swot.strengths) swot.strengths = 'Clear framing; narrative skill';
+        if (!swot.weaknesses) swot.weaknesses = 'Overthinking; perfectionism';
+        if (!swot.opportunities) swot.opportunities = 'Prototype-first approach; public demos';
+        if (!swot.threats) swot.threats = 'Hype fatigue; distraction';
+      }
+      alert('SWOT drafted (editable).');
+    }
+
+    // ===== Map Generation (rule-based MVP) =====
+    function generateMap() {
+      // Clear current
+      territories.splice(0); nodes.splice(0); edges.splice(0);
+
+      const mapType = chatInput.value.toLowerCase().includes('ielts') ? 'ielts' : 'generic';
+
+      if (mapType === 'ielts') {
+        // territories
+        const t1 = { id: crypto.randomUUID(), label: 'Listening', x: 40, y: 40, w: 360, h: 320 };
+        const t2 = { id: crypto.randomUUID(), label: 'Reading', x: 440, y: 40, w: 360, h: 320 };
+        const t3 = { id: crypto.randomUUID(), label: 'Writing', x: 40, y: 400, w: 360, h: 320 };
+        const t4 = { id: crypto.randomUUID(), label: 'Speaking', x: 440, y: 400, w: 360, h: 320 };
+        territories.push(t1, t2, t3, t4);
+
+        // nodes (simple grid)
+        function addNode(label, tx, ty) {
+          const id = crypto.randomUUID(); nodes.push({ id, label, x: tx, y: ty, note: '' }); return id;
+        }
+        const n1 = addNode('Baseline test', t1.x + 140, t1.y + 80);
+        const n2 = addNode('Targeted drills', t1.x + 220, t1.y + 160);
+        const n3 = addNode('Skimming/Scanning', t2.x + 140, t2.y + 80);
+        const n4 = addNode('Q-type practice', t2.x + 220, t2.y + 160);
+        const n5 = addNode('Task 1 structure', t3.x + 140, t3.y + 80);
+        const n6 = addNode('Task 2 argument', t3.x + 220, t3.y + 160);
+        const n7 = addNode('Mock interviews', t4.x + 140, t4.y + 80);
+        const n8 = addNode('Fluency + Coherence', t4.x + 220, t4.y + 160);
+      
+        
+
+        // edges (sequence)
+        edges.push(
+          { id: crypto.randomUUID(), source: n1, target: n2 },
+          { id: crypto.randomUUID(), source: n3, target: n4 },
+          { id: crypto.randomUUID(), source: n5, target: n6 },
+          { id: crypto.randomUUID(), source: n7, target: n8 }
+        );
+      } else {
+        const tt = { id: crypto.randomUUID(), label: 'Project', x: 40, y: 40, w: 360, h: 320 };
+        const tr = { id: crypto.randomUUID(), label: 'Research', x: 440, y: 40, w: 360, h: 320 };
+        const tb = { id: crypto.randomUUID(), label: 'Build', x: 40, y: 400, w: 360, h: 320 };
+        const ts = { id: crypto.randomUUID(), label: 'Share', x: 440, y: 400, w: 360, h: 320 };
+        territories.push(tt, tr, tb, ts);
+        function addNode(label, tx, ty) { const id = crypto.randomUUID(); nodes.push({ id, label, x: tx, y: ty, note: '' }); return id; }
+        const a = addNode('Define problem', tt.x + 160, tt.y + 90);
+        const b = addNode('Hypotheses', tr.x + 160, tr.y + 90);
+        const c = addNode('Prototype', tb.x + 160, tb.y + 90);
+        const d = addNode('Public demo', ts.x + 160, ts.y + 90);
+        edges.push({ id: crypto.randomUUID(), source: a, target: b }, { id: crypto.randomUUID(), source: b, target: c }, { id: crypto.randomUUID(), source: c, target: d });
+      }
+      centerView();
+
+      
+    }
+
+    // ===== Boot =====
+    onMounted(() => {
+      centerView();
+    });
+
+    return {
+      // state
+      chatInput, swot,
+      territories, nodes, edges, selectedNode,
+      quickNodeLabel,
+      // view
+      viewBox, initView, isPanning,
+      // actions
+      runAnalysis, generateMap,
+      onWheel, onPanStart, onPanMove, onPanEnd,
+      onNodeDragStart, nodeById, selectNode, deselectNode, deleteNode,
+      quickAddNode, centerView, zoomAtCenter,
+      saveState, loadState, resetAll,editingNode,overlayStyle,saveEditor,closeEditor
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
