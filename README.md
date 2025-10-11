@@ -1,394 +1,293 @@
-# LLM Map Proxy Server
+# Character Canvas - Visual Workflow Platform
 
-A modular Node.js proxy server that converts natural language prompts into structured knowledge maps using various LLM providers (OpenAI, Anthropic).
+A visual workflow platform with chat-to-canvas conversion built with Vue 3 and modern composables architecture.
 
-## Features
+## Architecture Overview
 
-- **Multiple LLM Providers**: Easy switching between OpenAI and Anthropic
-- **Structured Output**: Generates maps with nodes, edges, territories, and metadata
-- **Robust Validation**: JSON schema validation using Zod
-- **Error Handling**: Comprehensive error handling with fallback mechanisms
-- **Modular Architecture**: Clean separation of concerns
-- **Type Safety**: Schema-validated requests and responses
-
-## Project Structure
+The application follows Vue 3's Composition API pattern with a clean separation of concerns:
 
 ```
-hikki_prototype/
-├── server.js                           # Main Express server
-├── package.json                        # Dependencies and scripts
-├── .env.example                        # Environment configuration template
-├── README.md                           # Documentation
-└── src/
-    ├── config/
-    │   └── config.js                   # Centralized configuration
-    ├── middleware/
-    │   └── errorHandler.js             # Error handling middleware
-    ├── routes/
-    │   └── mapRoutes.js                # API endpoints
-    ├── schemas/
-    │   └── mapSchema.js                # Zod schemas and validators
-    └── services/
-        └── llmService.js               # LLM abstraction layer
+character-canvas/
+├── src/
+│   ├── App.vue                   # Main component (the "blueprint")
+│   ├── main.js                   # Entry point (Vue initialization)
+│   ├── style.css                 # Global styles
+│   └── composables/              # Business logic modules
+│       ├── useCanvas.js          # Viewport/Interaction Logic
+│       ├── useNodes.js           # Application Data & CRUD
+│       └── useState.js           # Core App State & Persistence
+├── index.html                    # HTML shell (mounts Vue app)
+├── vite.config.js                # Build configuration
+└── package.json                  # Dependencies
 ```
 
-## Installation
+## The Three Composables
 
-1. **Clone and install dependencies**:
-```bash
-npm install
+### 1. `useCanvas.js` - Viewport & Interaction Logic
+
+Handles canvas pan, zoom, and coordinate transformations.
+
+**Exports:**
+- `viewBox` - Reactive viewport coordinates {x, y, w, h}
+- `svgToWorld(e)` - Convert mouse event to world coordinates
+- `worldToScreen(node)` - Convert world coordinates to screen position
+- `onPanStart/Move/End` - Pan handlers
+- `onWheel` - Zoom handler
+- `zoomToNode(node, scale)` - Smooth zoom to focus on a node
+
+**Example:**
+```js
+import { useCanvas } from './composables/useCanvas.js';
+
+const { viewBox, svgToWorld, onWheel } = useCanvas();
+
+// Use in template
+<svg :viewBox="\`\${viewBox.x} \${viewBox.y} \${viewBox.w} \${viewBox.h}\`" @wheel.prevent="onWheel">
 ```
 
-2. **Configure environment variables**:
-```bash
-cp .env.example .env
-# Edit .env with your API keys
+### 2. `useNodes.js` - Application Data & CRUD
+
+Manages nodes, selection, and drag interactions.
+
+**Exports:**
+- `selectedNode` - Currently selected node (ref)
+- `quickNodeLabel` - Input for quick-add (ref)
+- `nodeById(id)` - Find node by ID
+- `selectNode(n)` - Select a node
+- `deselectNode()` - Clear selection
+- `quickAddNode()` - Add node at viewport center
+- `onNodeDragStart/Move/End` - Node drag handlers
+
+**Example:**
+```js
+import { useNodes } from './composables/useNodes.js';
+
+const { selectedNode, selectNode, quickAddNode } = useNodes();
+
+// Quick add a node
+quickAddNode();
+
+// Select a node
+selectNode(myNode);
 ```
 
-3. **Add your API keys** to `.env`:
-```env
-OPENAI_API_KEY=sk-...
-# OR
-ANTHROPIC_API_KEY=sk-ant-...
+### 3. `useState.js` - Core App State & Persistence
+
+Manages global state arrays and localStorage persistence.
+
+**Exports:**
+- `territories` - Reactive array of territories
+- `nodes` - Reactive array of nodes
+- `edges` - Reactive array of edges
+- `chatInput` - Chat input ref
+- `swot` - SWOT analysis object
+- `saveSnapshot(name)` - Save state to localStorage
+- `loadSnapshot(index)` - Load state from localStorage
+- `runAnalysis()` - Run SWOT analysis (stub)
+- `generateMap()` - Generate demo workflow map
+
+**Example:**
+```js
+import { useState } from './composables/useState.js';
+
+const { nodes, territories, saveSnapshot } = useState();
+
+// Save current state
+saveSnapshot('my-checkpoint');
 ```
 
-## Usage
+## Type Definitions (JSDoc)
 
-### Start the server
+The composables include JSDoc type definitions for better IDE support:
 
-**Development mode** (with auto-reload):
-```bash
-npm run dev
-```
-
-**Production mode**:
-```bash
-npm start
-```
-
-The server will start on `http://localhost:3000` by default.
-
-## API Endpoints
-
-### 1. Generate Map (Main Endpoint)
-
-**POST** `/api/generate`
-
-Convert a natural language prompt into a structured knowledge map.
-
-**Request Body**:
-```json
-{
-  "prompt": "Explain the solar system",
-  "context": "Focus on the inner planets",
-  "provider": "openai",
-  "model": "gpt-4-turbo-preview",
-  "temperature": 0.7,
-  "maxTokens": 4000
-}
-```
-
-**Required Fields**:
-- `prompt` (string): The text prompt to convert into a map
-
-**Optional Fields**:
-- `context` (string): Additional context for the prompt
-- `provider` (string): `"openai"` or `"anthropic"` (defaults to env var)
-- `model` (string): Specific model to use
-- `temperature` (number): 0-2, controls randomness
-- `maxTokens` (number): Maximum tokens in response
-
-**Response**:
-```json
-{
-  "success": true,
-  "data": {
-    "nodes": [
-      {
-        "id": "sun",
-        "label": "Sun",
-        "x": 500,
-        "y": 500,
-        "type": "entity",
-        "size": 50,
-        "color": "#FDB813"
-      },
-      {
-        "id": "earth",
-        "label": "Earth",
-        "x": 700,
-        "y": 500,
-        "type": "entity",
-        "size": 30,
-        "color": "#4A90E2"
-      }
-    ],
-    "edges": [
-      {
-        "id": "edge-1",
-        "source": "earth",
-        "target": "sun",
-        "label": "orbits",
-        "type": "relationship",
-        "weight": 8
-      }
-    ],
-    "territories": [
-      {
-        "id": "inner-planets",
-        "name": "Inner Planets",
-        "nodeIds": ["mercury", "venus", "earth", "mars"],
-        "color": "#FFE5B4",
-        "description": "Rocky planets close to the sun"
-      }
-    ],
-    "metadata": {
-      "title": "Solar System Map",
-      "description": "Overview of the solar system",
-      "tags": ["astronomy", "planets"]
-    }
-  },
-  "metadata": {
-    "provider": "openai",
-    "model": "gpt-4-turbo-preview",
-    "fallback": false,
-    "usage": {
-      "promptTokens": 150,
-      "completionTokens": 800,
-      "totalTokens": 950
-    }
-  }
-}
-```
-
-### 2. Get Available Providers
-
-**GET** `/api/providers`
-
-Get list of configured LLM providers.
-
-**Response**:
-```json
-{
-  "success": true,
-  "data": {
-    "available": ["openai", "anthropic"],
-    "supported": ["openai", "anthropic"],
-    "default": "openai"
-  }
-}
-```
-
-### 3. Health Check
-
-**GET** `/api/health`
-
-Check server health and provider status.
-
-**Response**:
-```json
-{
-  "success": true,
-  "status": "healthy",
-  "timestamp": "2024-01-15T10:30:00.000Z",
-  "providers": {
-    "available": ["openai"],
-    "count": 1
-  }
-}
-```
-
-### 4. Validate Map Structure
-
-**POST** `/api/validate`
-
-Validate a map JSON structure without generating.
-
-**Request Body**:
-```json
-{
-  "nodes": [...],
-  "edges": [...],
-  "territories": [...],
-  "metadata": {...}
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "message": "Map structure is valid",
-  "data": { ... }
-}
-```
-
-## Usage Examples
-
-### Example 1: Basic Request (cURL)
-
-```bash
-curl -X POST http://localhost:3000/api/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "Create a knowledge map about machine learning"
-  }'
-```
-
-### Example 2: With Context and Provider
-
-```bash
-curl -X POST http://localhost:3000/api/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "Explain neural networks",
-    "context": "Focus on deep learning architectures",
-    "provider": "anthropic",
-    "temperature": 0.8
-  }'
-```
-
-### Example 3: JavaScript/Node.js Client
-
-```javascript
-const response = await fetch('http://localhost:3000/api/generate', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    prompt: 'Explain quantum computing',
-    context: 'Include key concepts and applications',
-    provider: 'openai'
-  })
-});
-
-const result = await response.json();
-console.log(result.data); // The generated map
-```
-
-### Example 4: Python Client
-
-```python
-import requests
-
-response = requests.post(
-    'http://localhost:3000/api/generate',
-    json={
-        'prompt': 'Explain blockchain technology',
-        'provider': 'anthropic',
-        'temperature': 0.7
-    }
-)
-
-map_data = response.json()['data']
-print(map_data)
-```
-
-## Map Schema
-
-### Node Structure
-```javascript
-{
-  id: string,              // Unique identifier
-  label: string,           // Display label
-  x: number,               // X coordinate (0-1000)
-  y: number,               // Y coordinate (0-1000)
-  type?: 'concept' | 'entity' | 'event' | 'location' | 'person',
-  size?: number,           // Node size (10-50)
-  color?: string,          // Hex color
-  metadata?: object        // Additional data
-}
-```
-
-### Edge Structure
-```javascript
-{
-  id: string,              // Unique identifier
-  source: string,          // Source node ID
-  target: string,          // Target node ID
-  label?: string,          // Relationship label
-  type?: 'relationship' | 'dependency' | 'similarity' | 'hierarchy',
-  weight?: number,         // Edge weight (1-10)
-  color?: string,          // Hex color
-  metadata?: object        // Additional data
-}
-```
-
-### Territory Structure
-```javascript
-{
-  id: string,              // Unique identifier
-  name: string,            // Territory name
-  nodeIds: string[],       // Array of node IDs
-  color?: string,          // Hex color
-  description?: string,    // Description
-  metadata?: object        // Additional data
-}
+```js
+/**
+ * @typedef {Object} Node
+ * @property {string} id - Unique identifier
+ * @property {string} label - Display name
+ * @property {number} x - X coordinate
+ * @property {number} y - Y coordinate
+ * @property {string|null} territoryId - Parent territory ID
+ * @property {string} note - User notes
+ * @property {'todo'|'in-progress'|'done'} status - Task status
+ * @property {number} timestamp - Creation time
+ */
 ```
 
 ## Error Handling
 
-The server includes comprehensive error handling:
+The application includes comprehensive error handling:
 
-- **Validation errors** (400): Invalid request body or parameters
-- **Provider errors** (502): LLM provider issues
-- **Configuration errors** (500): Missing API keys or config issues
+1. **Global Error Handler** (src/main.js:10)
+   - Catches uncaught component errors
+   - Logs to console for debugging
+   - Can be extended for error tracking services
 
-**Error Response Format**:
-```json
-{
-  "error": {
-    "message": "Error description",
-    "type": "ErrorType",
-    "details": { ... }
+2. **Component-Level Error Boundaries** (App.vue:178)
+   - `onErrorCaptured` hook prevents error propagation
+   - Displays user-friendly error messages
+   - Auto-dismisses after 5 seconds
+
+3. **Composable Error Guards**
+   - Try-catch blocks in critical operations
+   - Graceful fallbacks for missing data
+   - Console warnings for debugging
+
+**Example Error Flow:**
+```
+User Action → Component Error → onErrorCaptured → Error Banner Display
+                               ↓
+                        Console Error Log
+                               ↓
+                     (Optional) Sentry/Analytics
+```
+
+## Installation & Usage
+
+### Install Dependencies
+```bash
+cd character-canvas
+npm install
+```
+
+### Development Server
+```bash
+npm run dev
+```
+Opens at `http://localhost:3000` with hot module replacement.
+
+### Production Build
+```bash
+npm run build
+```
+Outputs to `dist/` directory.
+
+### Preview Production Build
+```bash
+npm run preview
+```
+
+## Features
+
+### Interactive Canvas
+- **Pan:** Click and drag on canvas background
+- **Zoom:** Scroll wheel (zooms at cursor position)
+- **Zoom Controls:** +/- buttons in toolbar
+- **Center View:** Reset button returns to initial viewport
+
+### Node Management
+- **Quick Add:** Type label + Enter in toolbar
+- **Drag Nodes:** Click and drag any node
+- **Select Node:** Double-click to open inspector panel
+- **Edit Node:** Update label, notes, and status in inspector
+
+### Territories
+- Visual grouping areas for nodes
+- Defined by {x, y, w, h} rectangles
+- Automatic in generated maps
+
+### SWOT Analysis
+- Input chat description in sidebar
+- Click "Analyze → SWOT" (currently a stub)
+- Edit SWOT fields directly
+- Integrated with state persistence
+
+### State Persistence
+- **Auto-save:** Triggered by "Generate Map"
+- **Manual Save:** Click "Save" button
+- **Load:** Click "Load" button (loads most recent)
+- **Storage:** Browser localStorage (key: 'mvp-history')
+
+## Dependencies
+
+### Runtime
+- **vue** (^3.5.13) - Progressive JavaScript framework
+
+### Development
+- **@vitejs/plugin-vue** (^5.2.4) - Vue 3 SFC support for Vite
+- **vite** (^6.0.7) - Next-generation frontend build tool
+
+## Browser Compatibility
+
+- Modern browsers with ES6+ support
+- Chrome/Edge 90+
+- Firefox 88+
+- Safari 14+
+
+## Performance Considerations
+
+1. **Code Splitting:** Vue vendor chunk separated (see vite.config.js:15)
+2. **Reactive Arrays:** Uses Vue 3's reactive() for optimal reactivity
+3. **Event Handlers:** Debounced where appropriate
+4. **SVG Rendering:** Hardware-accelerated transforms
+
+## Extending the Application
+
+### Adding a New Composable
+
+```js
+// src/composables/useMyFeature.js
+import { ref, reactive } from 'vue';
+
+export function useMyFeature() {
+  const myState = ref(null);
+
+  const myAction = () => {
+    // Implementation
+  };
+
+  return {
+    myState,
+    myAction
+  };
+}
+```
+
+### Using in App.vue
+
+```js
+import { useMyFeature } from './composables/useMyFeature.js';
+
+export default {
+  setup() {
+    const { myState, myAction } = useMyFeature();
+
+    return {
+      myState,
+      myAction
+    };
   }
 }
 ```
 
-## Configuration
+### Adding New Node Properties
 
-All configuration is centralized in `src/config/config.js` and controlled via environment variables in `.env`.
+1. Update type definition in `useState.js`
+2. Add field to `generateMap()` demo data
+3. Add input field in App.vue inspector panel
+4. Update `saveSnapshot()` if needed for persistence
 
-**Key Configuration Options**:
-- `PORT`: Server port (default: 3000)
-- `DEFAULT_LLM_PROVIDER`: Default provider (`openai` or `anthropic`)
-- `DEFAULT_TEMPERATURE`: Default temperature (0-2)
-- `DEFAULT_MAX_TOKENS`: Default max tokens
-- `CORS_ORIGIN`: CORS origin (default: `*`)
+## Troubleshooting
 
-## Development
+### "Application Failed to Load"
+- Check browser console for errors
+- Ensure `npm install` completed successfully
+- Verify Node.js version (14.18+ or 16+ recommended)
 
-### Project Architecture
+### Nodes Not Dragging
+- Check that `onNodeDragStart` is properly bound
+- Verify `svgToWorld` is imported in `useNodes.js`
+- Ensure event handlers are not being prevented
 
-The codebase follows a modular architecture:
-
-1. **server.js**: Express server setup and initialization
-2. **src/config/**: Configuration management
-3. **src/routes/**: API endpoint definitions
-4. **src/services/**: Business logic (LLM integration)
-5. **src/schemas/**: Data validation schemas
-6. **src/middleware/**: Express middleware
-
-### Adding a New LLM Provider
-
-To add a new provider, edit `src/services/llmService.js`:
-
-1. Add provider method (e.g., `callNewProvider()`)
-2. Register in `this.providers` object
-3. Update configuration in `src/config/config.js`
-4. Add API key to `.env`
-
-## Security Notes
-
-- **Never commit `.env` file** to version control
-- **Store API keys securely** in environment variables
-- **Use HTTPS** in production
-- **Set appropriate CORS_ORIGIN** in production
-- **Enable rate limiting** for production deployments
+### State Not Persisting
+- Check browser localStorage is enabled
+- Verify `saveSnapshot` is being called
+- Check console for localStorage errors (quota exceeded)
 
 ## License
 
-MIT
+Private project - Not licensed for distribution
 
-## Support
+## Contributing
 
-For issues or questions, please open an issue on the repository.
+This is a prototype project. For questions or contributions, contact the development team.
