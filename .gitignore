@@ -1,0 +1,16 @@
+# Environment variables - 最重要的部分！
+.env
+.env.*
+
+# Dependencies
+node_modules/
+
+# System files
+.DS_Store
+
+# Logs
+*.log
+
+# Backup files
+*.backup
+*.save
