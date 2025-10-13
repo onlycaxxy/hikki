@@ -22,6 +22,9 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Serve static frontend files
+app.use(express.static('dist'));
+
 // Request logging middleware (development only)
 if (config.server.env === 'development') {
   app.use((req, res, next) => {
@@ -34,24 +37,17 @@ if (config.server.env === 'development') {
   });
 }
 
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({
-    name: 'LLM Map Proxy Server',
-    version: '1.0.0',
-    status: 'running',
-    endpoints: {
-      generate: `${config.api.prefix}/generate`,
-      providers: `${config.api.prefix}/providers`,
-      health: `${config.api.prefix}/health`,
-      validate: `${config.api.prefix}/validate`
-    },
-    documentation: 'See README.md for usage examples'
-  });
-});
-
 // API routes
 app.use(config.api.prefix, mapRoutes);
+
+// Catch-all: serve index.html for non-API routes (SPA routing)
+app.get('*', (req, res, next) => {
+  // Don't catch API routes
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile('dist/index.html', { root: '.' });
+});
 
 // Error handling
 app.use(notFoundHandler);

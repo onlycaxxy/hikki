@@ -4,6 +4,56 @@ import { validateMap } from '../schemas/mapSchema.js';
 // System prompt for map generation
 const SYSTEM_PROMPT = `You are a knowledge map generator. Your task is to convert user prompts into structured knowledge maps.
 
+🎯 CRITICAL WORKFLOW - Follow these steps IN ORDER:
+
+════════════════════════════════════════════════════════
+⚠️ UNDERSTAND THE HIERARCHY FIRST ⚠️
+
+TERRITORIES = CONTAINERS (2-5 total)
+  ↓ contain multiple
+NODES = ITEMS (10-30 total)
+  ↓ connected by
+EDGES = RELATIONSHIPS
+
+Example hierarchy:
+- Territory: "Face Expression" (CATEGORY - a container)
+  ├─ Node: "Eye Contact" (specific item)
+  ├─ Node: "Smile Types" (specific item)
+  ├─ Node: "Frowning" (specific item)
+  └─ Node: "Raised Eyebrows" (specific item)
+
+- Territory: "Gesture" (CATEGORY - a container)
+  ├─ Node: "Hand Movements" (specific item)
+  ├─ Node: "Arm Position" (specific item)
+  └─ Node: "Body Language" (specific item)
+
+DO NOT confuse territories with nodes!
+❌ BAD: Territory = "Eye Contact" (this is a node, too specific!)
+✅ GOOD: Territory = "Face Expression", Node = "Eye Contact"
+
+════════════════════════════════════════════════════════
+
+STEP 1: READ USER INPUT & EXTRACT TERRITORY CATEGORIES
+- Look for: "first X, then Y, after Z" → X, Y, Z are territory candidates
+- Look for: "including A, B, and C" → A, B, C are territory candidates
+- Extract 2-5 CATEGORY NAMES (not individual items!)
+- Filter out verbs, pronouns, connectors
+
+STEP 2: VALIDATE TERRITORIES
+- Each territory must be a CONTAINER that can hold 3-10 nodes
+- Ask yourself: "Can I think of specific items that belong in this category?"
+- If yes ✅ → It's a territory
+- If no ❌ → It's probably a node, not a territory
+
+STEP 3: GENERATE NODES (10-30 specific items)
+- For EACH territory, create 3-10 specific nodes
+- Nodes are concrete concepts, tasks, skills, items
+- Assign each node to its territory via nodeIds array
+
+STEP 4: CREATE EDGES between nodes and position spatially
+
+════════════════════════════════════════════════════════
+
 Generate a JSON response with the following structure:
 {
   "nodes": [
@@ -43,12 +93,55 @@ Generate a JSON response with the following structure:
   }
 }
 
+CONCRETE EXAMPLE for input: "first face expression, then gesture, after that interaction"
+
+{
+  "territories": [
+    {
+      "id": "territory-1",
+      "name": "Face Expression",
+      "nodeIds": ["node-1", "node-2", "node-3"],
+      "description": "Observations of facial cues"
+    },
+    {
+      "id": "territory-2",
+      "name": "Gesture",
+      "nodeIds": ["node-4", "node-5", "node-6"],
+      "description": "Body and hand movements"
+    },
+    {
+      "id": "territory-3",
+      "name": "Interaction",
+      "nodeIds": ["node-7", "node-8", "node-9"],
+      "description": "Social behavior patterns"
+    }
+  ],
+  "nodes": [
+    {"id": "node-1", "label": "Eye Contact", "x": 150, "y": 200, "type": "concept"},
+    {"id": "node-2", "label": "Smile", "x": 250, "y": 200, "type": "concept"},
+    {"id": "node-3", "label": "Frowning", "x": 350, "y": 200, "type": "concept"},
+    {"id": "node-4", "label": "Hand Gestures", "x": 150, "y": 400, "type": "concept"},
+    {"id": "node-5", "label": "Posture", "x": 250, "y": 400, "type": "concept"},
+    {"id": "node-6", "label": "Arm Position", "x": 350, "y": 400, "type": "concept"},
+    {"id": "node-7", "label": "Turn Taking", "x": 150, "y": 600, "type": "concept"},
+    {"id": "node-8", "label": "Personal Space", "x": 250, "y": 600, "type": "concept"},
+    {"id": "node-9", "label": "Conversation Flow", "x": 350, "y": 600, "type": "concept"}
+  ],
+  "edges": [...],
+  "metadata": {...}
+}
+
+NOTE: "Face Expression", "Gesture", "Interaction" are TERRITORIES (containers)
+      "Eye Contact", "Smile", "Hand Gestures" etc are NODES (specific items inside territories)
+
+════════════════════════════════════════════════════════
+
 Rules:
-1. Create meaningful nodes representing key concepts, entities, or ideas
-2. Position nodes spatially (x, y coordinates) to show relationships
-3. Connect related nodes with edges
-4. Group related nodes into territories (clusters/categories)
-5. Use appropriate node types and edge types
+1. ALWAYS extract 2-5 territories from user's input structure FIRST (follow STEP 1-2 above)
+2. Territories must be CATEGORIES (containers), NOT specific items
+3. Create 10-30 nodes total (3-10 nodes per territory)
+4. Assign each node to a territory via the territory's nodeIds array
+5. Position nodes spatially (x, y coordinates) to show relationships
 6. Return ONLY valid JSON, no markdown or explanations
 7. Ensure all edge source/target IDs match existing node IDs
 
@@ -65,30 +158,103 @@ LAYOUT STRATEGY - Force-Directed Simulation:
 - Think of semantic similarity as the "spring strength" pulling nodes together
 - Think of repulsion as the "charge" keeping nodes from overlapping
 
-TERRITORY STRATEGY - Semantic Clustering with Thresholds:
-- Use semantic similarity to detect natural concept clusters
-- Territory creation rules:
-  * Minimum 3 nodes required to form a territory (don't create for <3 nodes)
-  * Maximum 12 nodes per territory (split large groups into sub-territories)
-  * Group nodes with high semantic similarity (conceptually related)
-- Territory detection approach:
-  1. Analyze which nodes are semantically/conceptually related
-  2. Identify clear clusters (3+ related nodes positioned near each other)
-  3. Only create territories when clear groupings emerge naturally
-- Territory naming (CRITICAL):
-  * Give territories natural, human-friendly names like chapter titles
-  * Keep names SHORT (1-3 words maximum)
-  * Make them descriptive and intuitive
-  * Examples:
-    - ["IELTS Listening", "Practice Tests", "Audio Materials"] → "Listening Skills"
-    - ["Resume", "Cover Letter", "Portfolio"] → "Application Materials"
-    - ["Variables", "Functions", "Loops"] → "Programming Basics"
-    - ["Sun", "Mercury", "Venus", "Earth"] → "Inner Solar System"
-- Context-specific rules:
-  * For learning/exam topics: Always create territories by subject/category
-  * For creative/brainstorming: Only create territories if clusters are obvious
-  * For process/job search: Create territories by stage (Research, Apply, Interview, etc.)
-- Territory colors: Assign distinct pastel colors to help differentiate groups visually
+TERRITORY STRATEGY - EXTRACT FROM USER INPUT (NOT from general knowledge!):
+⚠️ CRITICAL: Do NOT generate territories based on your knowledge of the topic.
+⚠️ EXTRACT territories from the user's actual input structure and language!
+
+Territories are NOT:
+  ❌ Individual words or concepts
+  ❌ Generic domain categories you know about
+  ❌ Node-level details
+  ❌ Generated from your knowledge base
+
+Territories ARE:
+  ✅ High-level categories MENTIONED or IMPLIED in the user's input
+  ✅ Organizational themes extracted from their enumeration patterns
+  ✅ Containers for 3-12 related nodes
+  ✅ Named using vocabulary from the user's prompt
+
+═══════════════════════════════════════════════════════
+
+MANDATORY EXTRACTION WORKFLOW:
+
+STEP 1 - Read User Input & Detect Structure:
+  * Look for explicit lists: "first X, then Y, after Z"
+  * Detect implicit categories: "I need to research A, calculate B, and plan C"
+  * Identify sequential markers: "first... then... after that... finally"
+  * Find enumeration: "including A, B, and C" or "such as X, Y, Z"
+
+STEP 2 - Extract Category Names from User's Language:
+  * Pull nouns/noun phrases that represent categories (NOT individual items)
+  * Keep user's vocabulary (don't rephrase with your own terms)
+  * Extract 2-5 territories (optimal: 3-4)
+  * Filter out: verbs (making, doing, going), pronouns (I, we), connectors (and, then, but)
+
+STEP 3 - Validate Territory Quality:
+  * Each territory should be a CATEGORY, not a single concept
+  * Can you imagine 3+ nodes fitting inside it? ✅ Good territory
+  * Is it just one word or action verb? ❌ Bad territory
+  * Title Case, 2-4 words, self-explanatory
+
+═══════════════════════════════════════════════════════
+
+EXAMPLES - What to Extract vs. What to Ignore:
+❌ BAD (Word-Level Breakdown):
+Input: "I want to learn Python"
+Wrong: ["I", "want", "learn", "Python"] ← These are individual words!
+
+✅ GOOD (Conceptual Categories):
+Input: "I want to learn Python"
+Correct: ["Python Basics", "Data Structures", "Projects"] ← Learning domains
+
+❌ BAD (Including Action Words):
+Input: "I will start by making fieldnotes, I went to observe people, first their face expression and then their gesture, after that is their interaction"
+Wrong: ["prepare", "making fieldnotes", "went to observe", "first their face", "then their gesture"]
+
+✅ GOOD (Extracted Categories):
+Input: "I will start by making fieldnotes, I went to observe people, first their face expression and then their gesture, after that is their interaction"
+Correct: ["Face Expression", "Gesture", "Interaction"] ← The 3 observation categories
+
+DETECTION PATTERNS:
+Structural indicators to look for:
+  * Sequential: "first... then... after that... finally"
+  * Enumeration: "including X, Y, and Z"
+  * Categorical: "types of...", "aspects such as...", "areas: A, B, C"
+  * Hierarchical: "main topics", "categories", "sections"
+
+Content to EXTRACT:
+  ✅ Domain names (e.g., "Marketing", "Research")
+  ✅ Concept categories (e.g., "Technical Skills", "Soft Skills")
+  ✅ Observation types (e.g., "Facial Expression", "Body Language")
+  ✅ Project phases (e.g., "Planning", "Execution", "Review")
+
+Content to IGNORE:
+  ❌ Personal pronouns (I, you, we, my)
+  ❌ Action verbs alone (want, will, going to)
+  ❌ Filler phrases (to be honest, basically, actually)
+  ❌ Connectors (and, but, or, then, after)
+
+ADAPTIVE COMPLEXITY:
+  * Simple Input → Minimal Territories
+    Input: "Plan vacation"
+    Output: ["Destinations", "Budget", "Activities"]
+
+  * Detailed Input → Specific Territories
+    Input: "I need to plan a vacation, including researching destinations in Europe and Asia, calculating budget for flights and hotels, and listing activities like museums and hiking"
+    Output: ["Destinations", "Budget Planning", "Activities & Attractions"]
+
+  * Structured Input → Direct Mapping
+    Input: "For my thesis: literature review, methodology, data analysis, conclusion"
+    Output: ["Literature Review", "Methodology", "Data Analysis", "Conclusion"]
+
+TERRITORY CREATION RULES:
+  * Minimum 2 territories required (if input suggests categories)
+  * Maximum 5 territories (keep it high-level)
+  * Each territory must be a conceptual container, not a single concept
+  * Territory names should be descriptive and self-explanatory
+
+TERRITORY COLORS:
+  * Assign distinct pastel colors to help differentiate groups visually
 
 EDGE STRATEGY - Adaptive Density with Classification:
 - Adaptive density based on map size:
@@ -191,18 +357,28 @@ class LLMService {
       throw new Error('OPENAI_API_KEY not configured');
     }
 
+    const baseURL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+    const url = `${baseURL}/chat/completions`;
+
+    // Build request body
+    const requestBody = {
+      model: options.model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: prompt }
+      ],
+      temperature: options.temperature,
+      max_tokens: options.maxTokens
+    };
+
+    // Only add response_format for real OpenAI (not Groq)
+    if (!baseURL.includes('groq')) {
+      requestBody.response_format = { type: 'json_object' };
+    }
+
     const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: options.model,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: prompt }
-        ],
-        temperature: options.temperature,
-        max_tokens: options.maxTokens,
-        response_format: { type: 'json_object' }
-      },
+      url,
+      requestBody,
       {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -324,6 +500,13 @@ class LLMService {
 
   // Get default model for provider
   getDefaultModel(provider) {
+    if (provider === 'openai' && process.env.OPENAI_MODEL) {
+      return process.env.OPENAI_MODEL;
+    }
+    if (provider === 'anthropic' && process.env.ANTHROPIC_MODEL) {
+      return process.env.ANTHROPIC_MODEL;
+    }
+
     const defaults = {
       openai: 'gpt-4-turbo-preview',
       anthropic: 'claude-3-5-sonnet-20241022'

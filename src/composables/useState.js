@@ -1,5 +1,6 @@
 
 import { reactive, ref } from 'vue';
+import placeNodes from '../services/nodePositioning.js';
 
 /**
  * @typedef {Object} Territory
@@ -139,21 +140,103 @@ export function runAnalysis() {
     alert('SWOT drafted (stub).');
 }
 
-export function generateMap() {
-    // simple demo map so the canvas has nodes/territories
-    territories.splice(0); nodes.splice(0); edges.splice(0);
-    // add two territories
-    const t1 = { id: crypto.randomUUID(), label: 'Listening', x: 40, y: 40, w: 360, h: 300 };
-    const t2 = { id: crypto.randomUUID(), label: 'Writing', x: 440, y: 40, w: 360, h: 300 };
-    territories.push(t1, t2);
-    // nodes
-    const n1 = { id: crypto.randomUUID(), label: 'Baseline test', x: t1.x + 120, y: t1.y + 80, territoryId: t1.id, note: '', status:'todo', timestamp: Date.now() };
-    const n2 = { id: crypto.randomUUID(), label: 'Targeted drills', x: t1.x + 220, y: t1.y + 160, territoryId: t1.id, note: '', status:'todo', timestamp: Date.now() };
-    const n3 = { id: crypto.randomUUID(), label: 'Task 1 practice', x: t2.x + 120, y: t2.y + 80, territoryId: t2.id, note: '', status:'todo', timestamp: Date.now() };
-    nodes.push(n1, n2, n3);
-    edges.push({ id: crypto.randomUUID(), source: n1.id, target: n2.id });
-    // optional autosnapshot here
-    saveSnapshot('auto-generate');
+export async function generateMap() {
+    try {
+        // Clear existing data
+        territories.splice(0); nodes.splice(0); edges.splice(0);
+
+        // Call backend API to generate map using LLM (same server, relative path)
+        const response = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: chatInput.value || 'Create a learning plan for IELTS preparation with listening, reading, writing, and speaking skills'
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const mapData = data.data; // Backend returns { success: true, data: mapJson }
+
+        // LLM returns nodes WITH x,y coordinates - override them with our positioning algorithm
+        const llmNodes = mapData.nodes.map(n => ({
+            id: n.id || crypto.randomUUID(),
+            label: n.label,
+            type: n.type || 'concept',
+            note: '',
+            status: 'todo',
+            timestamp: Date.now()
+        }));
+
+        const llmEdges = mapData.edges.map(e => ({
+            id: e.id || crypto.randomUUID(),
+            source: e.source,
+            target: e.target,
+            type: e.type || 'relationship'
+        }));
+
+        // Add to state
+        llmNodes.forEach(n => nodes.push(n));
+        llmEdges.forEach(e => edges.push(e));
+
+        // Handle territories from LLM FIRST (before positioning nodes)
+        if (mapData.territories && mapData.territories.length > 0) {
+            const territorySpacing = 50;
+            const territoryWidth = 400;
+            const territoryHeight = 350;
+
+            mapData.territories.forEach((t, index) => {
+                // Position territories in a grid layout
+                const col = index % 3; // 3 columns
+                const row = Math.floor(index / 3);
+
+                territories.push({
+                    id: t.id || crypto.randomUUID(),
+                    label: t.name,
+                    x: 100 + col * (territoryWidth + territorySpacing),
+                    y: 100 + row * (territoryHeight + territorySpacing),
+                    w: territoryWidth,
+                    h: territoryHeight,
+                    nodeIds: t.nodeIds || []
+                });
+            });
+        }
+
+        // Position nodes INSIDE their territories
+        nodes.forEach(node => {
+            // Find which territory this node belongs to
+            const territory = territories.find(t =>
+                t.nodeIds && t.nodeIds.includes(node.id)
+            );
+
+            if (territory) {
+                // Find index within territory
+                const indexInTerritory = territory.nodeIds.indexOf(node.id);
+                const nodesInTerritory = territory.nodeIds.length;
+
+                // Grid layout within territory (2 columns)
+                const col = indexInTerritory % 2;
+                const row = Math.floor(indexInTerritory / 2);
+
+                // Position node inside territory with padding
+                node.x = territory.x + 80 + col * 120;
+                node.y = territory.y + 60 + row * 70;
+            } else {
+                // Fallback: random position if no territory
+                node.x = Math.random() * 800 + 100;
+                node.y = Math.random() * 600 + 100;
+            }
+        });
+
+        saveSnapshot('auto-generate');
+        console.log('✓ Map generated from LLM with algorithmic positioning');
+    } catch (error) {
+        console.error('Map generation failed:', error);
+        alert(`Failed to generate map: ${error.message}`);
+    }
 }
 
 export function useState() {
