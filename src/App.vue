@@ -118,6 +118,7 @@
             :key="n.id"
             @mousedown.stop="(e) => onNodeDragStart(e, n)"
             @dblclick.stop="() => selectNode(n)"
+            @contextmenu.prevent="(e) => onNodeRightClick(e, n)"
           >
             <rect
               :class="['node', selectedNode && selectedNode.id === n.id ? 'selected' : '']"
@@ -162,6 +163,24 @@
       </section>
     </main>
 
+    <!-- Custom Context Menu -->
+    <div
+      v-if="contextMenu.visible"
+      class="context-menu"
+      :style="{
+        left: contextMenu.x + 'px',
+        top: contextMenu.y + 'px'
+      }"
+    >
+      <button class="context-menu-item danger" @click="handleDeleteNode">
+        <span class="icon">🗑️</span>
+        Delete "{{ contextMenu.node?.label }}"
+      </button>
+      <button class="context-menu-item" @click="closeContextMenu">
+        Cancel
+      </button>
+    </div>
+
     <!-- Error Display -->
     <div v-if="error" class="error-banner" @click="clearError">
       {{ error }} (click to dismiss)
@@ -189,6 +208,14 @@ export default {
 
     const clearError = () => { error.value = null; };
 
+    // Context menu state
+    const contextMenu = ref({
+      visible: false,
+      x: 0,
+      y: 0,
+      node: null
+    });
+
     // Capture component errors
     onErrorCaptured((err, instance, info) => {
       handleError(err, `Component error (${info})`);
@@ -213,7 +240,7 @@ export default {
     // Destructure composables
     const {
       territories, nodes, edges, chatInput, swot, isGenerating,
-      runAnalysis, generateMap, saveSnapshot, loadSnapshot, autoLoad
+      runAnalysis, generateMap, saveSnapshot, loadSnapshot, autoLoad, deleteNode
     } = stateComposable;
 
     const {
@@ -277,6 +304,55 @@ export default {
       console.log('Node updated:', selectedNode.value);
     };
 
+    // Handle right-click on node - show context menu
+    const onNodeRightClick = (event, node) => {
+      try {
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Position context menu at cursor
+        contextMenu.value = {
+          visible: true,
+          x: event.clientX,
+          y: event.clientY,
+          node: node
+        };
+      } catch (err) {
+        handleError(err, 'Context menu failed');
+      }
+    };
+
+    // Close context menu
+    const closeContextMenu = () => {
+      contextMenu.value.visible = false;
+      contextMenu.value.node = null;
+    };
+
+    // Handle delete from context menu
+    const handleDeleteNode = () => {
+      try {
+        const node = contextMenu.value.node;
+        if (!node) return;
+
+        // Close inspector if this node is selected
+        if (selectedNode.value && selectedNode.value.id === node.id) {
+          deselectNode();
+        }
+
+        // Delete the node
+        const success = deleteNode(node.id);
+
+        if (!success) {
+          handleError(new Error('Failed to delete node'), 'Delete failed');
+        }
+
+        // Close context menu
+        closeContextMenu();
+      } catch (err) {
+        handleError(err, 'Delete node failed');
+      }
+    };
+
     // Zoom controls
     const zoomAtCenter = (factor) => {
       try {
@@ -315,6 +391,21 @@ export default {
           console.log('No saved state, generating initial map...');
           generateMap();
         }
+
+        // Global click handler to close context menu
+        const handleGlobalClick = (e) => {
+          // Check if click is outside context menu
+          if (contextMenu.value.visible && !e.target.closest('.context-menu')) {
+            closeContextMenu();
+          }
+        };
+
+        document.addEventListener('click', handleGlobalClick);
+
+        // Cleanup on unmount
+        return () => {
+          document.removeEventListener('click', handleGlobalClick);
+        };
       } catch (err) {
         handleError(err, 'Initialization failed');
       }
@@ -332,6 +423,7 @@ export default {
       selectedNode,
       quickNodeLabel,
       editingNode,
+      contextMenu,
 
       // View
       viewBox,
@@ -345,6 +437,9 @@ export default {
       handleLoad,
       handleReset,
       handleNodeUpdate,
+      onNodeRightClick,
+      closeContextMenu,
+      handleDeleteNode,
       onWheel,
       onPanStart,
       onPanMove,
@@ -613,5 +708,64 @@ svg.dragging {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+}
+
+/* Context Menu */
+.context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  min-width: 200px;
+  z-index: 9999;
+  animation: contextMenuSlide 0.15s ease-out;
+}
+
+@keyframes contextMenuSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.context-menu-item {
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: background 0.15s ease;
+  color: #1f2937;
+}
+
+.context-menu-item:hover {
+  background: #f3f4f6;
+}
+
+.context-menu-item.danger {
+  color: #dc2626;
+}
+
+.context-menu-item.danger:hover {
+  background: #fef2f2;
+}
+
+.context-menu-item .icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
 }
 </style>

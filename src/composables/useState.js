@@ -263,6 +263,57 @@ function positionNodeInTerritory(node, territory, indexInTerritory) {
     return { x: finalX, y: finalY };
 }
 
+// ---------- NODE MANAGEMENT ----------
+/**
+ * Delete a node and all its connected edges
+ * @param {string} nodeId - ID of the node to delete
+ * @returns {boolean} True if node was deleted successfully
+ */
+export function deleteNode(nodeId) {
+    try {
+        // Find the node
+        const nodeIndex = nodes.findIndex(n => n.id === nodeId);
+        if (nodeIndex === -1) {
+            console.warn(`Node ${nodeId} not found`);
+            return false;
+        }
+
+        const node = nodes[nodeIndex];
+        console.log(`🗑️ Deleting node "${node.label}" (${nodeId})`);
+
+        // Remove the node from the array
+        nodes.splice(nodeIndex, 1);
+
+        // Remove all edges connected to this node
+        const edgesToRemove = edges.filter(e => e.source === nodeId || e.target === nodeId);
+        edgesToRemove.forEach(edge => {
+            const edgeIndex = edges.findIndex(e => e.id === edge.id);
+            if (edgeIndex !== -1) {
+                edges.splice(edgeIndex, 1);
+                console.log(`  → Removed edge ${edge.id}`);
+            }
+        });
+
+        // Remove node from its parent territory's nodeIds
+        territories.forEach(territory => {
+            if (territory.nodeIds && territory.nodeIds.includes(nodeId)) {
+                const idIndex = territory.nodeIds.indexOf(nodeId);
+                territory.nodeIds.splice(idIndex, 1);
+                console.log(`  → Removed from territory "${territory.label}"`);
+            }
+        });
+
+        // Auto-save after deletion
+        autoSave();
+
+        console.log(`✅ Node deleted successfully (${edgesToRemove.length} edges removed)`);
+        return true;
+    } catch (error) {
+        console.error('Failed to delete node:', error);
+        return false;
+    }
+}
+
 // ---------- STUBS for analysis & map generation ----------
 export function runAnalysis() {
     // rule-based stub: fill swot from chatInput for demo
@@ -459,6 +510,6 @@ export function useState() {
         chatInput, swot, isGenerating,
         // Functions
         saveSnapshot, loadSnapshot, runAnalysis, generateMap,
-        autoSave, autoLoad
+        autoSave, autoLoad, deleteNode
     }
 }
