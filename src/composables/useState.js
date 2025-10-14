@@ -221,6 +221,8 @@ export function runAnalysis() {
 
 export async function generateMap() {
     try {
+        console.log('🚀 Starting map generation...');
+
         // Clear existing data
         territories.splice(0); nodes.splice(0); edges.splice(0);
 
@@ -234,10 +236,24 @@ export async function generateMap() {
         });
 
         if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
+            const errorData = await response.json().catch(() => null);
+            const errorMessage = errorData?.error || `Server error: ${response.status}`;
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();
+
+        // Check if LLM succeeded
+        if (!data.success) {
+            throw new Error(data.error || 'Map generation failed');
+        }
+
+        // Warn if fallback was used
+        if (data.metadata?.fallback) {
+            console.warn('⚠️ Using fallback map - LLM response was invalid');
+            alert('Warning: Map generation used fallback mode. Results may be limited.');
+        }
+
         const mapData = data.data; // Backend returns { success: true, data: mapJson }
 
         // LLM returns nodes WITH x,y coordinates - override them with our positioning algorithm
@@ -343,10 +359,30 @@ export async function generateMap() {
         console.log(`✓ Positioned ${nodesPositioned} nodes, ${nodesOutside} outside territories`);
 
         saveSnapshot('auto-generate');
-        console.log('✓ Map generated from LLM with algorithmic positioning');
+        console.log('✅ Map generation complete!');
+        console.log(`   → ${territories.length} territories`);
+        console.log(`   → ${nodes.length} nodes`);
+        console.log(`   → ${edges.length} edges`);
     } catch (error) {
-        console.error('Map generation failed:', error);
-        alert(`Failed to generate map: ${error.message}`);
+        console.error('❌ Map generation failed:', error);
+
+        // Show user-friendly error message
+        let userMessage = 'Failed to generate map. ';
+
+        if (error.message.includes('Rate limit') || error.message.includes('busy')) {
+            userMessage += 'The AI service is currently busy. Please wait a moment and try again.';
+        } else if (error.message.includes('API key') || error.message.includes('not configured')) {
+            userMessage += 'API configuration error. Please check your API keys.';
+        } else if (error.message.includes('Invalid map structure')) {
+            userMessage += 'The AI returned an invalid response. Please try a different prompt.';
+        } else {
+            userMessage += error.message;
+        }
+
+        alert(userMessage);
+
+        // Re-throw to prevent partial state
+        throw error;
     }
 }
 

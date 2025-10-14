@@ -333,28 +333,40 @@ class LLMService {
       : prompt;
 
     try {
+      console.log(`🤖 Calling ${provider} LLM (model: ${model})...`);
+
       const response = await this.providers[provider](fullPrompt, {
         model,
         temperature,
         maxTokens
       });
 
+      console.log(`✅ LLM responded successfully (${response.usage.totalTokens} tokens)`);
+
       // Extract and validate map JSON
       const mapJson = this.extractJSON(response.content);
+
+      console.log('🔍 Validating map structure...');
       const validation = validateMap(mapJson);
 
       if (!validation.success) {
-        // Try fallback parsing
-        const fallbackMap = this.fallbackParser(prompt, context);
-        return {
-          mapJson: fallbackMap,
-          provider,
-          model,
-          usage: response.usage,
-          fallback: true
-        };
+        console.error('❌ LLM returned invalid map structure');
+        console.error('Validation errors:', JSON.stringify(validation.error, null, 2));
+        console.error('Map data structure:', {
+          hasNodes: Array.isArray(mapJson.nodes),
+          nodeCount: mapJson.nodes?.length,
+          hasEdges: Array.isArray(mapJson.edges),
+          edgeCount: mapJson.edges?.length,
+          hasTerritories: Array.isArray(mapJson.territories),
+          territoryCount: mapJson.territories?.length
+        });
+        console.error('First few nodes:', mapJson.nodes?.slice(0, 2));
+        console.error('Raw LLM response (first 500 chars):', response.content.substring(0, 500));
+
+        throw new Error(`Invalid map structure from LLM: ${JSON.stringify(validation.error)}`);
       }
 
+      console.log('✓ Map validation passed');
       return {
         mapJson: validation.data,
         provider,
@@ -362,18 +374,17 @@ class LLMService {
         usage: response.usage
       };
     } catch (error) {
-      console.error(`LLM Error [${provider}]:`, error.message);
-
-      // Return fallback map on error
-      const fallbackMap = this.fallbackParser(prompt, context);
-      return {
-        mapJson: fallbackMap,
+      console.error(`❌ LLM Error [${provider}]:`, error.message);
+      console.error('Error details:', {
         provider,
         model,
-        usage: null,
-        fallback: true,
-        error: error.message
-      };
+        errorType: error.constructor.name,
+        status: error.response?.status,
+        statusText: error.response?.statusText
+      });
+
+      // Re-throw the error instead of using fallback
+      throw new Error(`Map generation failed: ${error.message}`);
     }
   }
 
