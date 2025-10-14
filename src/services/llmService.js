@@ -290,6 +290,33 @@ class LLMService {
     };
   }
 
+  // Retry wrapper with exponential backoff for rate limiting
+  async callWithRetry(apiCall, retries = 3, provider = 'API') {
+    for (let i = 0; i < retries; i++) {
+      try {
+        return await apiCall();
+      } catch (error) {
+        const isRateLimited = error.response?.status === 429;
+        const isLastAttempt = i === retries - 1;
+
+        if (isRateLimited && !isLastAttempt) {
+          const delay = Math.pow(2, i) * 1000; // 1s, 2s, 4s
+          console.log(`⏳ ${provider} rate limit reached. Retrying in ${delay / 1000}s... (Attempt ${i + 1}/${retries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // If it's the last attempt or not a rate limit error, throw
+        if (isLastAttempt) {
+          if (isRateLimited) {
+            throw new Error(`${provider} is currently busy. Please try again in a few moments.`);
+          }
+          throw error;
+        }
+      }
+    }
+  }
+
   // Main entry point
   async generateMap(prompt, context = '', options = {}) {
     const provider = options.provider || process.env.DEFAULT_LLM_PROVIDER || 'openai';
@@ -376,17 +403,23 @@ class LLMService {
       requestBody.response_format = { type: 'json_object' };
     }
 
-    const response = await axios.post(
-      url,
-      requestBody,
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
+    // Determine provider name for logging
+    const providerName = baseURL.includes('groq') ? 'Groq' : 'OpenAI';
+
+    // Wrap the API call with retry logic
+    const response = await this.callWithRetry(async () => {
+      return await axios.post(
+        url,
+        requestBody,
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+    }, 3, providerName);
 
     return {
       content: response.data.choices[0].message.content,
@@ -405,26 +438,29 @@ class LLMService {
       throw new Error('ANTHROPIC_API_KEY not configured');
     }
 
-    const response = await axios.post(
-      'https://api.anthropic.com/v1/messages',
-      {
-        model: options.model,
-        max_tokens: options.maxTokens,
-        temperature: options.temperature,
-        system: SYSTEM_PROMPT,
-        messages: [
-          { role: 'user', content: prompt }
-        ]
-      },
-      {
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json'
+    // Wrap the API call with retry logic
+    const response = await this.callWithRetry(async () => {
+      return await axios.post(
+        'https://api.anthropic.com/v1/messages',
+        {
+          model: options.model,
+          max_tokens: options.maxTokens,
+          temperature: options.temperature,
+          system: SYSTEM_PROMPT,
+          messages: [
+            { role: 'user', content: prompt }
+          ]
         },
-        timeout: 30000
-      }
-    );
+        {
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+    }, 3, 'Anthropic');
 
     return {
       content: response.data.content[0].text,
