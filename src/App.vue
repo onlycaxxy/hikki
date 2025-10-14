@@ -6,11 +6,20 @@
         <h2>Character Chat ▸ Needs</h2>
         <textarea
           v-model="chatInput"
+          :disabled="isGenerating"
           placeholder="e.g. I want to prepare for IELTS in 8 weeks; I struggle with timing and writing Task 1..."
         ></textarea>
         <div class="row">
-          <button class="btn" @click="runAnalysis">Analyze ▸ SWOT</button>
-          <button class="btn" @click="generateMap">Generate Map</button>
+          <button class="btn" @click="runAnalysis" :disabled="isGenerating">
+            Analyze ▸ SWOT
+          </button>
+          <button class="btn" @click="generateMap" :disabled="isGenerating">
+            <span v-if="!isGenerating">Generate Map</span>
+            <span v-else class="spinner-row">
+              <span class="spinner"></span>
+              Generating...
+            </span>
+          </button>
         </div>
       </div>
 
@@ -203,8 +212,8 @@ export default {
 
     // Destructure composables
     const {
-      territories, nodes, edges, chatInput, swot,
-      runAnalysis, generateMap, saveSnapshot, loadSnapshot
+      territories, nodes, edges, chatInput, swot, isGenerating,
+      runAnalysis, generateMap, saveSnapshot, loadSnapshot, autoLoad
     } = stateComposable;
 
     const {
@@ -298,13 +307,16 @@ export default {
     // Mount lifecycle
     onMounted(() => {
       try {
-        // Generate initial demo map
-        if (generateMap && typeof generateMap === 'function') {
+        // Try to load saved state first
+        const loaded = autoLoad && typeof autoLoad === 'function' && autoLoad();
+
+        // If no saved state, generate initial demo map
+        if (!loaded && generateMap && typeof generateMap === 'function') {
+          console.log('No saved state, generating initial map...');
           generateMap();
-          console.log('✓ Initial map generated');
         }
       } catch (err) {
-        handleError(err, 'Initial map generation failed');
+        handleError(err, 'Initialization failed');
       }
     });
 
@@ -313,6 +325,7 @@ export default {
       // State
       chatInput,
       swot,
+      isGenerating,
       territories,
       nodes,
       edges,
@@ -394,10 +407,35 @@ export default {
   color: #fff;
   cursor: pointer;
   transition: background 0.2s;
+  position: relative;
 }
 
-.sidebar .btn:hover {
+.sidebar .btn:hover:not(:disabled) {
   background: #333;
+}
+
+.sidebar .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .sidebar .row {

@@ -1,7 +1,12 @@
 // src/composables/useNodes.js
 import { reactive, ref } from 'vue';
-import { nodes } from './useState.js';
+import { nodes, territories, autoSave } from './useState.js';
 import { svgToWorld, viewBox } from './useCanvas.js';
+
+// Territory boundary constraints
+const NODE_WIDTH = 180;
+const NODE_HEIGHT = 80;
+const TERRITORY_PADDING = 20;
 
 /**
  * @typedef {Object} DragState
@@ -86,18 +91,61 @@ export const onNodeDragStart = (e, node) => {
 
 export const onNodeDragMove = (e) => {
   if (!dragging.active || !dragging.id) return;
-  const p = svgToWorld(e); // <-- CRITICAL: Uses imported helper
-  const n = nodes.find(x => x.id === dragging.id); // <-- CRITICAL: Uses imported 'nodes'
+  const p = svgToWorld(e);
+  const n = nodes.find(x => x.id === dragging.id);
   if (!n) return;
-  n.x = p.x - dragging.ox;
-  n.y = p.y - dragging.oy;
+
+  // Calculate new position
+  let newX = p.x - dragging.ox;
+  let newY = p.y - dragging.oy;
+
+  // Find which territory this node belongs to
+  const territory = territories.find(t =>
+    t.nodeIds && t.nodeIds.includes(n.id)
+  );
+
+  // Constrain to territory bounds if node is in a territory
+  if (territory) {
+    // Min bounds (left, top)
+    const minX = territory.x + TERRITORY_PADDING;
+    const minY = territory.y + 60 + TERRITORY_PADDING; // 60 = header height
+
+    // Max bounds (right, bottom) - account for node size
+    const maxX = territory.x + territory.w - NODE_WIDTH / 2 - TERRITORY_PADDING;
+    const maxY = territory.y + territory.h - NODE_HEIGHT / 2 - TERRITORY_PADDING;
+
+    // Clamp position
+    newX = Math.max(minX + NODE_WIDTH / 2, Math.min(newX, maxX));
+    newY = Math.max(minY + NODE_HEIGHT / 2, Math.min(newY, maxY));
+
+    // Visual feedback when hitting boundary
+    const isAtBoundary =
+      newX !== (p.x - dragging.ox) || newY !== (p.y - dragging.oy);
+
+    if (isAtBoundary && !n._boundaryWarned) {
+      console.log(`🚧 Node "${n.label}" constrained to territory "${territory.label}"`);
+      n._boundaryWarned = true; // Prevent log spam
+    }
+  }
+
+  n.x = newX;
+  n.y = newY;
 };
 
 export const onNodeDragEnd = (e) => {
+  // Clear boundary warning flag
+  if (dragging.id) {
+    const n = nodes.find(x => x.id === dragging.id);
+    if (n) delete n._boundaryWarned;
+  }
+
   dragging.active = false;
   dragging.id = null;
   window.removeEventListener('mousemove', onNodeDragMove);
   window.removeEventListener('mouseup', onNodeDragEnd);
+
+  // Auto-save after drag
+  autoSave();
 };
 
 export function useNodes() {

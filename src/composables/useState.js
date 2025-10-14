@@ -51,9 +51,65 @@ export const edges = reactive([]);
 
 // --- FEATURE/UI STATE ---
 export const chatInput = ref('');
+export const isGenerating = ref(false); // Loading state for LLM calls
 
 /** @type {import('vue').UnwrapRef<SWOT>} */
 export const swot = reactive({ strengths:'', weaknesses:'', opportunities:'', threats:'' });
+
+// ---------- AUTO-SAVE / AUTO-LOAD (Basic Persistence) ----------
+const AUTO_SAVE_KEY = 'hikki-canvas-state';
+
+/**
+ * Auto-save current canvas state to localStorage
+ * Called automatically after map generation and on changes
+ */
+export function autoSave() {
+    try {
+        const state = {
+            territories: JSON.parse(JSON.stringify(territories)),
+            nodes: JSON.parse(JSON.stringify(nodes)),
+            edges: JSON.parse(JSON.stringify(edges)),
+            timestamp: Date.now()
+        };
+        localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(state));
+        console.log('💾 Auto-saved canvas state');
+    } catch (error) {
+        console.error('Auto-save failed:', error);
+    }
+}
+
+/**
+ * Auto-load canvas state from localStorage
+ * Called on page load
+ * @returns {boolean} True if state was loaded successfully
+ */
+export function autoLoad() {
+    try {
+        const saved = localStorage.getItem(AUTO_SAVE_KEY);
+        if (!saved) {
+            console.log('No saved state found');
+            return false;
+        }
+
+        const state = JSON.parse(saved);
+
+        // Clear current state
+        territories.splice(0);
+        nodes.splice(0);
+        edges.splice(0);
+
+        // Load saved data
+        (state.territories || []).forEach(t => territories.push(t));
+        (state.nodes || []).forEach(n => nodes.push(n));
+        (state.edges || []).forEach(e => edges.push(e));
+
+        console.log('✅ Auto-loaded canvas state from', new Date(state.timestamp).toLocaleString());
+        return true;
+    } catch (error) {
+        console.error('Auto-load failed:', error);
+        return false;
+    }
+}
 
 // ---------- SNAPSHOT (localStorage simple) ----------
 /**
@@ -220,7 +276,13 @@ export function runAnalysis() {
 }
 
 export async function generateMap() {
+    if (isGenerating.value) {
+        console.warn('Map generation already in progress');
+        return;
+    }
+
     try {
+        isGenerating.value = true;
         console.log('🚀 Starting map generation...');
 
         // Clear existing data
@@ -359,6 +421,7 @@ export async function generateMap() {
         console.log(`✓ Positioned ${nodesPositioned} nodes, ${nodesOutside} outside territories`);
 
         saveSnapshot('auto-generate');
+        autoSave(); // Auto-save after successful generation
         console.log('✅ Map generation complete!');
         console.log(`   → ${territories.length} territories`);
         console.log(`   → ${nodes.length} nodes`);
@@ -383,6 +446,8 @@ export async function generateMap() {
 
         // Re-throw to prevent partial state
         throw error;
+    } finally {
+        isGenerating.value = false;
     }
 }
 
@@ -391,8 +456,9 @@ export function useState() {
         // Data arrays
         territories, nodes, edges,
         // Feature state
-        chatInput, swot,
+        chatInput, swot, isGenerating,
         // Functions
-        saveSnapshot, loadSnapshot, runAnalysis, generateMap
+        saveSnapshot, loadSnapshot, runAnalysis, generateMap,
+        autoSave, autoLoad
     }
 }
