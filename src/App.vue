@@ -142,23 +142,46 @@
 
         <!-- Inspector Panel (when node selected) -->
         <div v-if="selectedNode" class="inspector">
-          <h3>{{ selectedNode.label }}</h3>
-          <input
-            v-model="selectedNode.label"
-            placeholder="Node Label"
-            @input="handleNodeUpdate"
-          />
-          <textarea
-            v-model="selectedNode.note"
-            placeholder="Notes..."
-            @input="handleNodeUpdate"
-          ></textarea>
-          <select v-model="selectedNode.status" @change="handleNodeUpdate">
-            <option value="todo">To Do</option>
-            <option value="in-progress">In Progress</option>
-            <option value="done">Done</option>
-          </select>
-          <button class="btn" @click="deselectNode">Close</button>
+          <!-- Header -->
+          <div class="inspector-header">
+            <h3>{{ selectedNode.label }}</h3>
+            <button class="btn-icon" @click="deselectNode">✕</button>
+          </div>
+
+          <!-- Node Label -->
+          <div class="field-group">
+            <label class="field-label">Label</label>
+            <input
+              v-model="selectedNode.label"
+              placeholder="Node name..."
+              @input="handleNodeUpdate"
+            />
+          </div>
+
+          <!-- Status -->
+          <div class="field-group">
+            <label class="field-label">Status</label>
+            <select v-model="selectedNode.status" @change="handleNodeUpdate">
+              <option value="todo">To Do</option>
+              <option value="in-progress">In Progress</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+
+          <!-- Field Notes (Optional) -->
+          <div class="field-group field-notes">
+            <label class="field-label">Notes</label>
+            <textarea
+              v-model="selectedNode.note"
+              placeholder="Add observations, insights, or leave empty..."
+              @input="handleNodeUpdate"
+            ></textarea>
+          </div>
+
+          <!-- Footer -->
+          <div class="inspector-footer">
+            <span class="timestamp">{{ formatTimestamp(selectedNode.timestamp) }}</span>
+          </div>
         </div>
       </section>
     </main>
@@ -353,6 +376,20 @@ export default {
       }
     };
 
+    // Format timestamp for display
+    const formatTimestamp = (ts) => {
+      if (!ts) return '';
+      const date = new Date(ts);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+      return date.toLocaleDateString();
+    };
+
     // Zoom controls
     const zoomAtCenter = (factor) => {
       try {
@@ -454,6 +491,7 @@ export default {
       zoomToNode,
       zoomAtCenter,
       centerView,
+      formatTimestamp,
 
       // Error handling
       error,
@@ -631,40 +669,138 @@ svg.dragging {
 
 .inspector {
   position: absolute;
-  right: 18px;
-  top: 18px;
-  width: 300px;
-  background: #fff;
-  border: 1px solid #eee;
+  right: 20px;
+  top: 20px;
+  width: 380px;
+  max-height: calc(100vh - 80px);
+  background: #fdfcfb;
+  border: 1px solid #e7e5e1;
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
-  padding: 12px;
-  display: grid;
-  gap: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: inspectorFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.inspector h3 {
+@keyframes inspectorFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.inspector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid #ede9e3;
+  background: #fdfcfb;
+}
+
+.inspector-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
+  font-weight: 500;
+  color: #2d2a26;
+  letter-spacing: -0.01em;
 }
 
-.inspector input,
-.inspector textarea,
-.inspector select {
+.btn-icon {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #847e75;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-icon:hover {
+  background: #f4f1ed;
+  color: #2d2a26;
+  transform: scale(1.05);
+}
+
+.field-group {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f4f1ed;
+}
+
+.field-group:last-of-type {
+  border-bottom: none;
+}
+
+.field-group.field-notes {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b6560;
+  margin-bottom: 8px;
+  letter-spacing: -0.005em;
+}
+
+.field-group input[type="text"],
+.field-group textarea,
+.field-group select {
   width: 100%;
-  padding: 8px;
-  border: 1px solid #ddd;
+  padding: 10px 12px;
+  border: 1px solid #e7e5e1;
   border-radius: 8px;
   font-family: inherit;
+  font-size: 14px;
+  color: #2d2a26;
+  background: #ffffff;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.inspector .btn {
-  padding: 8px 12px;
-  border: none;
-  border-radius: 8px;
-  background: #111;
-  color: #fff;
-  cursor: pointer;
+.field-group input:focus,
+.field-group textarea:focus,
+.field-group select:focus {
+  outline: none;
+  border-color: #c49a6c;
+  box-shadow: 0 0 0 3px rgba(196, 154, 108, 0.12);
+  background: #ffffff;
+}
+
+.field-group textarea {
+  resize: vertical;
+  min-height: 180px;
+  line-height: 1.6;
+  flex: 1;
+}
+
+.field-group textarea::placeholder {
+  color: #b5aca3;
+}
+
+.inspector-footer {
+  padding: 14px 20px;
+  background: #faf9f7;
+  border-top: 1px solid #ede9e3;
+}
+
+.timestamp {
+  font-size: 12px;
+  color: #9a8f85;
+  letter-spacing: -0.005em;
 }
 
 .badge {
