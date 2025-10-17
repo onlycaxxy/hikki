@@ -56,26 +56,44 @@ export const isGenerating = ref(false); // Loading state for LLM calls
 /** @type {import('vue').UnwrapRef<SWOT>} */
 export const swot = reactive({ strengths:'', weaknesses:'', opportunities:'', threats:'' });
 
-// ---------- AUTO-SAVE / AUTO-LOAD (Basic Persistence) ----------
-const AUTO_SAVE_KEY = 'hikki-canvas-state';
+// ---------- AUTO-SAVE / AUTO-LOAD (Enhanced Persistence) ----------
+import {
+    debouncedAutoSave,
+    immediateAutoSave,
+    loadSavedState,
+    exportData as exportDataFile,
+    importData as importDataFile
+} from './usePersistence.js';
 
 /**
- * Auto-save current canvas state to localStorage
- * Called automatically after map generation and on changes
+ * Get current state snapshot
+ * @returns {Object} Current state
+ */
+function getStateSnapshot() {
+    return {
+        territories: JSON.parse(JSON.stringify(territories)),
+        nodes: JSON.parse(JSON.stringify(nodes)),
+        edges: JSON.parse(JSON.stringify(edges)),
+        timestamp: Date.now()
+    };
+}
+
+/**
+ * Auto-save current canvas state (debounced for frequent edits)
+ * Called after node edits, property changes
  */
 export function autoSave() {
-    try {
-        const state = {
-            territories: JSON.parse(JSON.stringify(territories)),
-            nodes: JSON.parse(JSON.stringify(nodes)),
-            edges: JSON.parse(JSON.stringify(edges)),
-            timestamp: Date.now()
-        };
-        localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(state));
-        console.log('💾 Auto-saved canvas state');
-    } catch (error) {
-        console.error('Auto-save failed:', error);
-    }
+    const state = getStateSnapshot();
+    debouncedAutoSave(state);
+}
+
+/**
+ * Immediate save for critical operations
+ * Called after delete, duplicate, drag operations
+ */
+export function immediateSave() {
+    const state = getStateSnapshot();
+    immediateAutoSave(state);
 }
 
 /**
@@ -85,13 +103,11 @@ export function autoSave() {
  */
 export function autoLoad() {
     try {
-        const saved = localStorage.getItem(AUTO_SAVE_KEY);
-        if (!saved) {
-            console.log('No saved state found');
+        const state = loadSavedState();
+        if (!state) {
+            console.log('ℹ️ No saved state found, will generate initial map');
             return false;
         }
-
-        const state = JSON.parse(saved);
 
         // Clear current state
         territories.splice(0);
@@ -103,11 +119,53 @@ export function autoLoad() {
         (state.nodes || []).forEach(n => nodes.push(n));
         (state.edges || []).forEach(e => edges.push(e));
 
-        console.log('✅ Auto-loaded canvas state from', new Date(state.timestamp).toLocaleString());
+        console.log('✅ State loaded from', new Date(state.timestamp).toLocaleString());
         return true;
     } catch (error) {
-        console.error('Auto-load failed:', error);
+        console.error('❌ Auto-load failed:', error);
         return false;
+    }
+}
+
+/**
+ * Export current state to JSON file
+ */
+export function exportState() {
+    try {
+        const state = getStateSnapshot();
+        exportDataFile(state);
+        console.log('✓ State exported successfully');
+    } catch (error) {
+        console.error('❌ Export failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Import state from JSON file
+ * @param {File} file - File to import
+ * @returns {Promise<void>}
+ */
+export async function importState(file) {
+    try {
+        const state = await importDataFile(file);
+
+        // Clear current state
+        territories.splice(0);
+        nodes.splice(0);
+        edges.splice(0);
+
+        // Load imported data
+        (state.territories || []).forEach(t => territories.push(t));
+        (state.nodes || []).forEach(n => nodes.push(n));
+        (state.edges || []).forEach(e => edges.push(e));
+
+        // Save to localStorage
+        immediateSave();
+        console.log('✓ State imported successfully');
+    } catch (error) {
+        console.error('❌ Import failed:', error);
+        throw error;
     }
 }
 
@@ -303,8 +361,8 @@ export function deleteNode(nodeId) {
             }
         });
 
-        // Auto-save after deletion
-        autoSave();
+        // Immediate save after deletion (critical operation)
+        immediateSave();
 
         console.log(`✅ Node deleted successfully (${edgesToRemove.length} edges removed)`);
         return true;
@@ -472,7 +530,7 @@ export async function generateMap() {
         console.log(`✓ Positioned ${nodesPositioned} nodes, ${nodesOutside} outside territories`);
 
         saveSnapshot('auto-generate');
-        autoSave(); // Auto-save after successful generation
+        immediateSave(); // Immediate save after successful generation
         console.log('✅ Map generation complete!');
         console.log(`   → ${territories.length} territories`);
         console.log(`   → ${nodes.length} nodes`);
@@ -510,6 +568,7 @@ export function useState() {
         chatInput, swot, isGenerating,
         // Functions
         saveSnapshot, loadSnapshot, runAnalysis, generateMap,
-        autoSave, autoLoad, deleteNode
+        autoSave, immediateSave, autoLoad, deleteNode,
+        exportState, importState
     }
 }

@@ -38,6 +38,10 @@
           <button class="btn" @click="handleLoad">Load</button>
           <button class="btn" @click="handleReset">Reset</button>
         </div>
+        <div class="row">
+          <button class="btn btn-secondary" @click="handleExport">📥 Export</button>
+          <button class="btn btn-secondary" @click="handleImport">📤 Import</button>
+        </div>
       </div>
     </aside>
 
@@ -263,7 +267,8 @@ export default {
     // Destructure composables
     const {
       territories, nodes, edges, chatInput, swot, isGenerating,
-      runAnalysis, generateMap, saveSnapshot, loadSnapshot, autoLoad, deleteNode
+      runAnalysis, generateMap, saveSnapshot, loadSnapshot, autoLoad, deleteNode,
+      autoSave, exportState, importState
     } = stateComposable;
 
     const {
@@ -322,9 +327,43 @@ export default {
       }
     };
 
+    const handleExport = () => {
+      try {
+        exportState();
+        console.log('✓ Export successful');
+      } catch (err) {
+        handleError(err, 'Export failed');
+      }
+    };
+
+    const handleImport = () => {
+      try {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        input.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          try {
+            await importState(file);
+            console.log('✓ Import successful');
+          } catch (err) {
+            handleError(err, 'Import failed');
+          }
+        };
+        input.click();
+      } catch (err) {
+        handleError(err, 'Import failed');
+      }
+    };
+
     const handleNodeUpdate = () => {
-      // Trigger reactivity and optionally auto-save
-      console.log('Node updated:', selectedNode.value);
+      // Debounced auto-save (waits 500ms after last edit)
+      if (selectedNode.value) {
+        console.log('📝 Node edit detected:', selectedNode.value.label);
+        autoSave();
+      }
     };
 
     // Handle right-click on node - show context menu
@@ -473,6 +512,8 @@ export default {
       handleSave,
       handleLoad,
       handleReset,
+      handleExport,
+      handleImport,
       handleNodeUpdate,
       onNodeRightClick,
       closeContextMenu,
@@ -550,6 +591,14 @@ export default {
 .sidebar .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.sidebar .btn-secondary {
+  background: #4a5568;
+}
+
+.sidebar .btn-secondary:hover:not(:disabled) {
+  background: #2d3748;
 }
 
 .spinner-row {

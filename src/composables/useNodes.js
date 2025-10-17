@@ -1,6 +1,6 @@
 // src/composables/useNodes.js
 import { reactive, ref } from 'vue';
-import { nodes, territories, autoSave } from './useState.js';
+import { nodes, territories, immediateSave } from './useState.js';
 import { svgToWorld, viewBox } from './useCanvas.js';
 
 // Territory boundary constraints
@@ -144,8 +144,8 @@ export const onNodeDragEnd = (e) => {
   window.removeEventListener('mousemove', onNodeDragMove);
   window.removeEventListener('mouseup', onNodeDragEnd);
 
-  // Auto-save after drag
-  autoSave();
+  // Immediate save after drag (position change)
+  immediateSave();
 };
 
 export function useNodes() {
