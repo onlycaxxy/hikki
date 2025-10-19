@@ -2,18 +2,20 @@
   <div class="app">
     <!-- Sidebar: chat & analysis -->
     <aside class="sidebar">
-      <div>
-        <h2>Character Chat ▸ Needs</h2>
+      <!-- Chat Section (Always visible) -->
+      <section class="sidebar-section chat-section">
+        <h2 class="section-title">Character Chat ▸ Needs</h2>
         <textarea
           v-model="chatInput"
           :disabled="isGenerating"
           placeholder="e.g. I want to prepare for IELTS in 8 weeks; I struggle with timing and writing Task 1..."
+          class="chat-textarea"
         ></textarea>
-        <div class="row">
-          <button class="btn" @click="runAnalysis" :disabled="isGenerating">
-            Analyze ▸ SWOT
+        <div class="button-row">
+          <button class="btn btn-action" @click="runAnalysis" :disabled="isGenerating">
+            Analyze SWOT
           </button>
-          <button class="btn" @click="generateMap" :disabled="isGenerating">
+          <button class="btn btn-action" @click="generateMap" :disabled="isGenerating">
             <span v-if="!isGenerating">Generate Map</span>
             <span v-else class="spinner-row">
               <span class="spinner"></span>
@@ -21,45 +23,85 @@
             </span>
           </button>
         </div>
-      </div>
+      </section>
 
-      <div>
-        <h2>SWOT (editable)</h2>
-        <label class="muted">Strengths</label>
-        <textarea v-model="swot.strengths"></textarea>
-        <label class="muted">Weaknesses</label>
-        <textarea v-model="swot.weaknesses"></textarea>
-        <label class="muted">Opportunities</label>
-        <textarea v-model="swot.opportunities"></textarea>
-        <label class="muted">Threats</label>
-        <textarea v-model="swot.threats"></textarea>
-        <div class="row">
-          <button class="btn" @click="handleSave">Save</button>
-          <button class="btn" @click="handleLoad">Load</button>
-          <button class="btn" @click="handleReset">Reset</button>
+      <!-- SWOT Section (Collapsible) -->
+      <section class="sidebar-section swot-section">
+        <button class="section-toggle" @click="swotExpanded = !swotExpanded">
+          <span class="toggle-icon">{{ swotExpanded ? '▼' : '▶' }}</span>
+          <h2 class="section-title-inline">SWOT Analysis</h2>
+        </button>
+
+        <div v-if="swotExpanded" class="swot-grid">
+          <div class="swot-quadrant">
+            <label class="swot-label">Strengths</label>
+            <textarea v-model="swot.strengths" rows="3"></textarea>
+          </div>
+          <div class="swot-quadrant">
+            <label class="swot-label">Weaknesses</label>
+            <textarea v-model="swot.weaknesses" rows="3"></textarea>
+          </div>
+          <div class="swot-quadrant">
+            <label class="swot-label">Opportunities</label>
+            <textarea v-model="swot.opportunities" rows="3"></textarea>
+          </div>
+          <div class="swot-quadrant">
+            <label class="swot-label">Threats</label>
+            <textarea v-model="swot.threats" rows="3"></textarea>
+          </div>
         </div>
-        <div class="row">
-          <button class="btn btn-secondary" @click="handleExport">📥 Export</button>
-          <button class="btn btn-secondary" @click="handleImport">📤 Import</button>
+      </section>
+
+      <!-- File Management (Compact icon bar) -->
+      <section class="sidebar-section file-section">
+        <div class="file-actions">
+          <button class="icon-btn" @click="handleSave" title="Save current state">
+            💾
+          </button>
+          <button class="icon-btn" @click="handleLoad" title="Load saved state">
+            📂
+          </button>
+          <button class="icon-btn" @click="handleExport" title="Export as JSON">
+            📥
+          </button>
+          <button class="icon-btn" @click="handleImport" title="Import from JSON">
+            📤
+          </button>
+          <button class="icon-btn icon-btn-danger" @click="handleReset" title="Reset all data">
+            🗑️
+          </button>
         </div>
-      </div>
+      </section>
     </aside>
 
     <!-- Main: toolbar + canvas -->
     <main class="main">
       <div class="toolbar">
-        <span class="badge">Zoom: {{ zoomPercentage }}%</span>
-        <button class="btn" @click="() => zoomAtCenter(1.2)">+</button>
-        <button class="btn" @click="() => zoomAtCenter(1 / 1.2)">−</button>
-        <button class="btn" @click="centerView">Center</button>
-        <input
-          type="text"
-          placeholder="Quick add node (Label)"
-          v-model="quickNodeLabel"
-          @keydown.enter="quickAddNode"
-        />
-        <button class="btn" @click="quickAddNode">Add Node</button>
-        <span class="muted">Click+Drag to pan · Scroll to zoom · Drag nodes</span>
+        <!-- Group 1: View Controls -->
+        <div class="toolbar-group">
+          <span class="badge" title="Current zoom level">Zoom: {{ zoomPercentage }}%</span>
+          <button class="btn toolbar-btn" @click="() => zoomAtCenter(1.2)" title="Zoom in">+</button>
+          <button class="btn toolbar-btn" @click="() => zoomAtCenter(1 / 1.2)" title="Zoom out">−</button>
+          <button class="btn toolbar-btn" @click="centerView" title="Reset view to center">Center</button>
+        </div>
+
+        <!-- Divider -->
+        <div class="toolbar-divider"></div>
+
+        <!-- Group 2: Quick Add (CTA Style) -->
+        <div class="toolbar-group toolbar-group-cta">
+          <input
+            type="text"
+            placeholder="Quick add node..."
+            v-model="quickNodeLabel"
+            @keydown.enter="quickAddNode"
+            class="quick-add-input"
+            title="Type a label and press Enter or click Add Node"
+          />
+          <button class="btn btn-primary" @click="quickAddNode" title="Add new node to canvas">
+            + Add Node
+          </button>
+        </div>
       </div>
 
       <section class="canvas-wrap">
@@ -224,6 +266,9 @@ import { useNodes } from './composables/useNodes.js';
 export default {
   name: 'App',
   setup() {
+    // UI state
+    const swotExpanded = ref(false);
+
     // Error handling
     const error = ref(null);
 
@@ -489,6 +534,9 @@ export default {
 
     // Return everything to template
     return {
+      // UI state
+      swotExpanded,
+
       // State
       chatInput,
       swot,
@@ -545,60 +593,87 @@ export default {
 <style scoped>
 .app {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 280px 1fr;
   height: 100vh;
 }
 
+/* ===== SIDEBAR ===== */
 .sidebar {
-  border-right: 1px solid #eee;
-  padding: 14px;
+  border-right: 1px solid #e5e7eb;
+  background: #fafbfc;
   display: flex;
   flex-direction: column;
-  gap: 12px;
   overflow-y: auto;
 }
 
-.sidebar h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
+.sidebar-section {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.sidebar textarea {
+/* Chat Section */
+.chat-section {
+  padding: 18px;
+  background: #fff;
+}
+
+.section-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.chat-textarea {
   width: 100%;
-  min-height: 120px;
-  padding: 10px;
-  border: 1px solid #ddd;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
   border-radius: 8px;
   resize: vertical;
   font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.sidebar .btn {
-  padding: 10px 12px;
+.chat-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-action {
+  flex: 1;
+  padding: 10px 14px;
   border: none;
-  border-radius: 10px;
-  background: #111;
+  border-radius: 8px;
+  background: #111827;
   color: #fff;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
-  position: relative;
+  transition: background 0.2s, transform 0.1s;
 }
 
-.sidebar .btn:hover:not(:disabled) {
-  background: #333;
+.btn-action:hover:not(:disabled) {
+  background: #1f2937;
+  transform: translateY(-1px);
 }
 
-.sidebar .btn:disabled {
+.btn-action:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-action:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.sidebar .btn-secondary {
-  background: #4a5568;
-}
-
-.sidebar .btn-secondary:hover:not(:disabled) {
-  background: #2d3748;
 }
 
 .spinner-row {
@@ -620,43 +695,199 @@ export default {
   to { transform: rotate(360deg); }
 }
 
-.sidebar .row {
-  display: flex;
-  gap: 8px;
+/* SWOT Section */
+.swot-section {
+  background: #fff;
 }
 
+.section-toggle {
+  width: 100%;
+  padding: 12px 0;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.section-toggle:hover {
+  opacity: 0.7;
+}
+
+.toggle-icon {
+  font-size: 12px;
+  color: #6b7280;
+  transition: transform 0.2s;
+}
+
+.section-title-inline {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.swot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.swot-quadrant {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.swot-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.swot-quadrant textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: border-color 0.2s;
+}
+
+.swot-quadrant textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* File Section */
+.file-section {
+  background: #f9fafb;
+  padding: 12px 16px;
+}
+
+.file-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.icon-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  transform: translateY(-1px);
+}
+
+.icon-btn-danger:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+/* ===== MAIN & TOOLBAR ===== */
 .main {
   display: grid;
-  grid-template-rows: 48px 1fr;
+  grid-template-rows: 52px 1fr;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #eee;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
 }
 
-.toolbar .btn {
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
-  background: #fafafa;
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-group-cta {
+  flex: 1;
+  max-width: 500px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 28px;
+  background: #d1d5db;
+}
+
+.toolbar-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 
-.toolbar .btn:hover {
-  background: #f0f0f0;
+.toolbar-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
 }
 
-.toolbar input[type="text"] {
-  padding: 6px 8px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  min-width: 200px;
+.quick-add-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
   font-family: inherit;
+  font-size: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.quick-add-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-primary {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
 }
 
 .canvas-wrap {
@@ -666,7 +897,7 @@ export default {
 
 svg {
   width: 100%;
-  height: calc(100vh - 48px);
+  height: calc(100vh - 52px);
   display: block;
   cursor: grab;
 }
