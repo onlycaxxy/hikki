@@ -14,3 +14,8 @@ node_modules/
 # Backup files
 *.backup
 *.save
+
+# Build output (Netlify builds this fresh)
+dist/
+dist-ssr/
+*.local
