@@ -3,6 +3,8 @@ import vue from '@vitejs/plugin-vue';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Netlify serves from root, no base path needed
+  // For GitHub Pages, use: base: '/hikki/',
   plugins: [vue()],
   server: {
     port: 3000,

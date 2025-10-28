@@ -1,0 +1,45 @@
+# Netlify Configuration
+# Deployment settings for hikki-prototype Vue app + serverless API
+
+[build]
+  # Build command (runs Vite build)
+  command = "npm run build"
+
+  # Directory to publish (Vite outputs to dist/)
+  publish = "dist"
+
+  # Serverless functions directory
+  functions = "netlify/functions"
+
+[build.environment]
+  # Node version for build and functions
+  NODE_VERSION = "18"
+
+# Redirect API calls to serverless functions
+# /api/generate -> /.netlify/functions/generate
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA routing - serve index.html for all non-API routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  conditions = {Role = ["client"]}
+  force = false
+
+# CORS headers for API responses
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type"
+
+# Cache static assets
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
