@@ -15,6 +15,9 @@
   # Node version for build and functions
   NODE_VERSION = "18"
 
+  # Ignore .env.example in secrets scanning (it contains example values, not real secrets)
+  SECRETS_SCAN_OMIT_PATHS = ".env.example"
+
 # Redirect API calls to serverless functions
 # /api/generate -> /.netlify/functions/generate
 [[redirects]]
