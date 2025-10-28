@@ -18,20 +18,19 @@
   # Ignore .env.example in secrets scanning (it contains example values, not real secrets)
   SECRETS_SCAN_OMIT_PATHS = ".env.example"
 
-# Redirect API calls to serverless functions
+# Redirect API calls to serverless functions (MUST come first)
 # /api/generate -> /.netlify/functions/generate
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
 
-# SPA routing - serve index.html for all non-API routes
+# SPA routing - serve index.html for all other routes
+# This enables client-side routing for Vue app
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-  conditions = {Role = ["client"]}
-  force = false
 
 # CORS headers for API responses
 [[headers]]
